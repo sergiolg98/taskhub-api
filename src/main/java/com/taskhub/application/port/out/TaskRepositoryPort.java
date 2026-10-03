@@ -13,5 +13,7 @@ public interface TaskRepositoryPort {
 
     List<Task> findByOwnerId(Long ownerId);
 
+    List<Task> findAll();
+
     void deleteById(Long id);
 }

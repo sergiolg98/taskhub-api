@@ -20,6 +20,10 @@ public class User {
         this.createdAt = createdAt;
     }
 
+    public static User register(String name, String email, String encodedPassword) {
+        return new User(null, name, email, encodedPassword, Role.USER, LocalDateTime.now());
+    }
+
     public Long getId() { return id; }
     public String getName() { return name; }
     public String getEmail() { return email; }

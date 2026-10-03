@@ -32,6 +32,15 @@ public class UserEntity {
     protected UserEntity() {
     }
 
+    public UserEntity(Long id, String name, String email, String password, Role role, LocalDateTime createdAt) {
+        this.id = id;
+        this.name = name;
+        this.email = email;
+        this.password = password;
+        this.role = role;
+        this.createdAt = createdAt;
+    }
+
     public Long getId() { return id; }
     public String getName() { return name; }
     public String getEmail() { return email; }

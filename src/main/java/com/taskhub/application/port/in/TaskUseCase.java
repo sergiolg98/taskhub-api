@@ -1,5 +1,6 @@
 package com.taskhub.application.port.in;
 
+import com.taskhub.domain.model.AuthenticatedUser;
 import com.taskhub.domain.model.Task;
 import com.taskhub.domain.model.TaskStatus;
 
@@ -7,15 +8,15 @@ import java.util.List;
 
 public interface TaskUseCase {
 
-    Task create(String title, String description, Long ownerId);
+    Task create(String title, String description, AuthenticatedUser user);
 
-    Task getById(Long id);
+    Task getById(Long id, AuthenticatedUser user);
 
-    List<Task> listByOwner(Long ownerId);
+    List<Task> listMine(AuthenticatedUser user);
 
-    Task update(Long id, String title, String description);
+    Task update(Long id, String title, String description, AuthenticatedUser user);
 
-    Task changeStatus(Long id, TaskStatus status);
+    Task changeStatus(Long id, TaskStatus status, AuthenticatedUser user);
 
-    void delete(Long id);
+    void delete(Long id, AuthenticatedUser user);
 }
