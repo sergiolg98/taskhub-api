@@ -3,13 +3,16 @@ package com.taskhub;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.taskhub.auth.domain.model.Role;
 import com.taskhub.auth.infrastructure.security.JwtTokenIssuer;
+import com.taskhub.common.security.JwtAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -22,6 +25,9 @@ class SecurityApiTest {
 
     @Autowired
     JwtTokenIssuer issuer;
+
+    @Autowired
+    ApplicationContext context;
 
     @Test
     void withoutTokenIs401() throws Exception {
@@ -95,6 +101,12 @@ class SecurityApiTest {
         mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"eva@taskhub.com\",\"password\":\"wrong\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void jwtFilterLivesOnlyInsideTheSecurityChain() {
+        // A Filter bean is also registered by Spring Boot as a servlet filter, so it would run twice.
+        assertThat(context.getBeanNamesForType(JwtAuthenticationFilter.class)).isEmpty();
     }
 
     @Test

@@ -18,7 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter,
+    SecurityFilterChain filterChain(HttpSecurity http, JwtParser jwtParser,
                                     SecurityErrorHandler errorHandler) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable) // csrf -> csrf.disable()
@@ -30,7 +30,7 @@ public class SecurityConfig {
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(errorHandler)
                         .accessDeniedHandler(errorHandler))
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(jwtParser), UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 
