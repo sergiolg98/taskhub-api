@@ -56,6 +56,31 @@ class AuthServiceTest {
     }
 
     @Test
+    void emailsAreStoredAndComparedInTheirCanonicalForm() {
+        when(users.existsByEmail("eva@taskhub.com")).thenReturn(false);
+        when(passwordHasher.hash("Secret123")).thenReturn("hashed");
+        when(users.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            return new User(10L, u.getName(), u.getEmail(), u.getPassword(), u.getRole(), LocalDateTime.now());
+        });
+        when(tokenIssuer.issue(10L, "eva@taskhub.com", Role.USER)).thenReturn("token");
+
+        authService.register("Eva", "  Eva@TaskHub.com ", "Secret123");
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(users).save(saved.capture());
+        assertThat(saved.getValue().getEmail()).isEqualTo("eva@taskhub.com");
+    }
+
+    @Test
+    void loginIsCaseInsensitiveAndTheTokenCarriesTheCanonicalEmail() {
+        when(authenticator.authenticate("ana@taskhub.com", "abc123")).thenReturn(new AuthenticatedUser(1L, Role.ADMIN));
+        when(tokenIssuer.issue(1L, "ana@taskhub.com", Role.ADMIN)).thenReturn("admin-token");
+
+        assertThat(authService.login("ANA@taskhub.com", "abc123")).isEqualTo("admin-token");
+    }
+
+    @Test
     void registerRejectsDuplicatedEmail() {
         when(users.existsByEmail("eva@taskhub.com")).thenReturn(true);
 

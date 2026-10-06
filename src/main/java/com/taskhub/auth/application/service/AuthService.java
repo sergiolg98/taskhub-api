@@ -12,6 +12,8 @@ import com.taskhub.auth.domain.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 @Service
 public class AuthService implements RegisterUserUseCase, LoginUseCase {
 
@@ -31,16 +33,24 @@ public class AuthService implements RegisterUserUseCase, LoginUseCase {
     @Override
     @Transactional
     public String register(String name, String email, String rawPassword) {
-        if (users.existsByEmail(email)) {
-            throw new EmailAlreadyUsedException(email);
+        String canonicalEmail = canonical(email);
+        if (users.existsByEmail(canonicalEmail)) {
+            throw new EmailAlreadyUsedException(canonicalEmail);
         }
-        User saved = users.save(User.register(name, email, passwordHasher.hash(rawPassword)));
+        User saved = users.save(User.register(name, canonicalEmail, passwordHasher.hash(rawPassword)));
         return tokenIssuer.issue(saved.getId(), saved.getEmail(), saved.getRole());
     }
 
     @Override
     public String login(String email, String rawPassword) {
-        AuthenticatedUser user = authenticator.authenticate(email, rawPassword);
-        return tokenIssuer.issue(user.id(), email, user.role());
+        String canonicalEmail = canonical(email);
+        AuthenticatedUser user = authenticator.authenticate(canonicalEmail, rawPassword);
+        return tokenIssuer.issue(user.id(), canonicalEmail, user.role());
+    }
+
+    // One identity per person: "Eva@TaskHub.com " and "eva@taskhub.com" are the same account,
+    // whatever the database collation says.
+    private static String canonical(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

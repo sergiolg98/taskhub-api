@@ -98,6 +98,19 @@ class SecurityApiTest {
     }
 
     @Test
+    void sameEmailWithDifferentCaseIsTheSameAccount() throws Exception {
+        String body = "{\"name\":\"Mixed\",\"email\":\"Mixed@TaskHub.com\",\"password\":\"Secret123\"}";
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(body.replace("Mixed@TaskHub.com", "MIXED@TASKHUB.COM")))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"MIXED@taskhub.com\",\"password\":\"Secret123\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void otherUsersTaskIs404ButAdminCanSeeIt() throws Exception {
         String luis = TestTokens.luis(mvc);
         String location = mvc.perform(post("/tasks").header("Authorization", luis)
