@@ -1,7 +1,8 @@
-# TaskHub — snapshot `03-microservices-design`
+# TaskHub — snapshot `04-expert-final`
 
 Proyecto guía del curso: monolito Spring Boot con arquitectura hexagonal, JPA y MySQL.
-Mismo código que `02-patterns`: **esta clase solo añade documentación** de diseño. El monolito sigue corriendo. Heredado de `02-patterns` (diseño interno refinado): registro/login en la capa de aplicación, **Strategy + Factory** de notificaciones y reglas de arquitectura ejecutables (**ArchUnit**).
+Cierre del módulo Experto: el monolito queda **preparado para dividirse**. Dos áreas de negocio (`auth`, `task`) con sus fronteras
+verificadas por tests, un contrato explícito entre ellas (`UserSummary`) y un token que basta para identificar al usuario sin consultar la base.
 
 ## Requisitos
 
@@ -40,6 +41,7 @@ Flyway crea las tablas y dos usuarios de ejemplo (ver abajo) en el primer arranq
 | PUT | `/tasks/{id}` | dueño o `ADMIN` | Actualizar título y descripción |
 | PATCH | `/tasks/{id}/status` | dueño o `ADMIN` | `PENDING`, `IN_PROGRESS`, `COMPLETED` |
 | DELETE | `/tasks/{id}` | dueño o `ADMIN` | Eliminar |
+| GET | `/users/{id}` | uno mismo o `ADMIN` | Resumen público: `id`, `name`, `role` (contrato entre áreas) |
 | GET | `/admin/users` | `ADMIN` | Lista de usuarios (sin contraseña) |
 | GET | `/admin/tasks` | `ADMIN` | Todas las tareas |
 
@@ -59,53 +61,33 @@ Códigos: `401` sin token, token inválido o credenciales erróneas · `403` rol
 
 ```text
 com.taskhub
-├── domain            model (User, Task, Role, TaskStatus, AuthenticatedUser) y exception
-├── application
-│   ├── port.in       TaskUseCase, AdminUseCase, RegisterUserUseCase, LoginUseCase
-│   ├── port.out      TaskRepositoryPort, UserRepositoryPort, NotificationPort,
-│   │                 PasswordHasherPort, TokenIssuerPort, CredentialsAuthenticatorPort
-│   └── service       TaskService, AdminService, AuthService
-├── infrastructure
-│   ├── web           controllers, DTOs, GlobalExceptionHandler
-│   ├── persistence   entidades JPA + adapters (Repository / Adapter)
-│   ├── security      SecurityConfig, JwtService, filtro JWT + adapters de los puertos de auth
-│   └── notification  NotificationStrategy (log | email), NotificationStrategyFactory, NotificationAdapter
+├── auth      identidad: domain · application (port.in/out, service) · infrastructure (web, persistence, security)
+├── task      trabajo:   domain · application (port.in/out, service) · infrastructure (web, persistence, notification, lookup)
+├── common    token (JwtParser, filtro, JwtPrincipal), SecurityConfig, formato de errores
 └── TaskHubApplication
 ```
 
-Flujo de una petición: `Controller → Input Port → Application Service → Output Port → Adapter`.
-Todas las dependencias apuntan hacia el dominio; `ArchitectureTest` lo comprueba en cada `mvn test`.
+Reglas (las comprueba `ArchitectureTest` en cada `mvn test`):
+
+- `auth` no conoce a `task`; `common` no conoce a ninguna de las dos.
+- `task` solo conoce a `auth` en `task.infrastructure.lookup` (el adaptador de `UserLookupPort`). Es la única arista entre las áreas.
+- Dentro de cada área: `domain` no conoce frameworks, `application` solo conoce puertos.
 
 ## Patrones y dónde verlos
 
 | Patrón / principio | Dónde |
 |---|---|
 | Repository | `TaskRepositoryPort`, `UserRepositoryPort` |
-| Adapter | `TaskPersistenceAdapter`, `UserPersistenceAdapter` (JPA ↔ dominio), `SpringPasswordHasher`, `JwtTokenIssuer`, `SpringCredentialsAuthenticator`, `NotificationAdapter` |
-| Strategy | `NotificationStrategy` → `LogNotificationStrategy`, `EmailNotificationStrategy` |
-| Factory | `NotificationStrategyFactory.forType(type)` |
-| DIP | `AuthService` y `TaskService` dependen de puertos, no de Spring Security, JJWT ni JPA |
-| OCP | una estrategia nueva = una clase nueva; la factory recibe todas las `NotificationStrategy` por inyección |
-| SRP | `AuthService` (casos de uso) / `JwtService` (tokens) / `SecurityConfig` (cadena de filtros) |
-| DI | siempre por constructor y `final`; `ArchitectureTest` prohíbe `@Autowired` en campos |
-
-## Notificaciones
-
-Al crear una tarea se notifica por el puerto `NotificationPort`. La estrategia se elige por configuración:
-
-```properties
-taskhub.notifications.type=log     # log | email (el email es simulado: solo escribe en el log)
-```
-
-Un valor desconocido hace fallar el arranque con la lista de tipos disponibles.
+| Adapter | `*PersistenceAdapter`, `SpringPasswordHasher`, `JwtTokenIssuer`, `SpringCredentialsAuthenticator`, `NotificationAdapter`, `UserLookupLocalAdapter` |
+| Strategy + Factory | `NotificationStrategy` (`log` \| `email`) + `NotificationStrategyFactory`, elegida con `taskhub.notifications.type` |
+| DIP | los servicios dependen de puertos; `UserLookupPort` oculta si el usuario se consulta en proceso o por red |
+| SRP | `JwtTokenIssuer` firma (auth); `JwtParser` valida (common) |
 
 ## Pruebas
 
-- `AuthServiceTest`, `TaskServiceTest`: unitarias, sin Spring ni HTTP (solo puertos con Mockito).
-- `NotificationStrategyFactoryTest`: la factory y su error con un tipo desconocido.
-- `ArchitectureTest`: `domain` no conoce frameworks; `application` no conoce JPA/web/security/JJWT; controllers no tocan `persistence`.
-- `TaskApiTest`, `SecurityApiTest`: de la clase 1, **sin cambios** (prueban que el refactor no alteró el comportamiento).
+`./mvnw test` (36 tests, usan H2): unitarias de casos de uso con puertos simulados, `JwtParserTest`, `NotificationStrategyFactoryTest`,
+`ArchitectureTest` y las de API (`TaskApiTest`, `SecurityApiTest`) que prueban el comportamiento completo.
 
 ## Pendiente a propósito (clases siguientes)
 
-Fronteras entre dominios `auth` y `task` (clase 4), microservicios (clase 7 en adelante).
+Revisión (clase 5) y separación física en microservicios (clase 7 en adelante).
