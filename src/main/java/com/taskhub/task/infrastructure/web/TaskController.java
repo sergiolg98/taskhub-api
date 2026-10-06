@@ -1,7 +1,8 @@
 package com.taskhub.task.infrastructure.web;
 
-import com.taskhub.auth.infrastructure.security.SecurityUser;
+import com.taskhub.common.security.JwtPrincipal;
 import com.taskhub.task.application.port.in.TaskUseCase;
+import com.taskhub.task.domain.model.Requester;
 import com.taskhub.task.infrastructure.web.dto.*;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,39 +24,43 @@ public class TaskController {
     }
 
     @GetMapping
-    public List<TaskResponse> list(@AuthenticationPrincipal SecurityUser principal) {
-        return taskUseCase.listMine(principal.toAuthenticatedUser()).stream().map(TaskResponse::from).toList();
+    public List<TaskResponse> list(@AuthenticationPrincipal JwtPrincipal principal) {
+        return taskUseCase.listMine(requester(principal)).stream().map(TaskResponse::from).toList();
     }
 
     @GetMapping("/{id}")
-    public TaskResponse get(@PathVariable Long id, @AuthenticationPrincipal SecurityUser principal) {
-        return TaskResponse.from(taskUseCase.getById(id, principal.toAuthenticatedUser()));
+    public TaskResponse get(@PathVariable Long id, @AuthenticationPrincipal JwtPrincipal principal) {
+        return TaskResponse.from(taskUseCase.getById(id, requester(principal)));
     }
 
     @PostMapping
     public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest request,
-                                               @AuthenticationPrincipal SecurityUser principal) {
+                                               @AuthenticationPrincipal JwtPrincipal principal) {
         TaskResponse created = TaskResponse.from(
-                taskUseCase.create(request.title(), request.description(), principal.toAuthenticatedUser()));
+                taskUseCase.create(request.title(), request.description(), requester(principal)));
         return ResponseEntity.created(URI.create("/tasks/" + created.id())).body(created);
     }
 
     @PutMapping("/{id}")
     public TaskResponse update(@PathVariable Long id, @Valid @RequestBody UpdateTaskRequest request,
-                               @AuthenticationPrincipal SecurityUser principal) {
+                               @AuthenticationPrincipal JwtPrincipal principal) {
         return TaskResponse.from(taskUseCase.update(id, request.title(), request.description(),
-                principal.toAuthenticatedUser()));
+                requester(principal)));
     }
 
     @PatchMapping("/{id}/status")
     public TaskResponse changeStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest request,
-                                     @AuthenticationPrincipal SecurityUser principal) {
-        return TaskResponse.from(taskUseCase.changeStatus(id, request.status(), principal.toAuthenticatedUser()));
+                                     @AuthenticationPrincipal JwtPrincipal principal) {
+        return TaskResponse.from(taskUseCase.changeStatus(id, request.status(), requester(principal)));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id, @AuthenticationPrincipal SecurityUser principal) {
-        taskUseCase.delete(id, principal.toAuthenticatedUser());
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal JwtPrincipal principal) {
+        taskUseCase.delete(id, requester(principal));
+    }
+
+    private static Requester requester(JwtPrincipal principal) {
+        return new Requester(principal.userId(), principal.isAdmin());
     }
 }

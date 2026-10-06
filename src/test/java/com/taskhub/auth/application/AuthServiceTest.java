@@ -44,7 +44,7 @@ class AuthServiceTest {
             User u = inv.getArgument(0);
             return new User(10L, u.getName(), u.getEmail(), u.getPassword(), u.getRole(), LocalDateTime.now());
         });
-        when(tokenIssuer.issue("eva@taskhub.com", Role.USER)).thenReturn("token");
+        when(tokenIssuer.issue(10L, "eva@taskhub.com", Role.USER)).thenReturn("token");
 
         String token = authService.register("Eva", "eva@taskhub.com", "Secret123");
 
@@ -68,7 +68,7 @@ class AuthServiceTest {
     void loginIssuesATokenWithTheRoleOfTheAuthenticatedUser() {
         when(authenticator.authenticate("ana@taskhub.com", "abc123"))
                 .thenReturn(new AuthenticatedUser(1L, Role.ADMIN));
-        when(tokenIssuer.issue("ana@taskhub.com", Role.ADMIN)).thenReturn("admin-token");
+        when(tokenIssuer.issue(1L, "ana@taskhub.com", Role.ADMIN)).thenReturn("admin-token");
 
         assertThat(authService.login("ana@taskhub.com", "abc123")).isEqualTo("admin-token");
     }
@@ -79,6 +79,6 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login("ana@taskhub.com", "bad"))
                 .isInstanceOf(InvalidCredentialsException.class);
-        verify(tokenIssuer, never()).issue(any(), any());
+        verify(tokenIssuer, never()).issue(any(), any(), any());
     }
 }

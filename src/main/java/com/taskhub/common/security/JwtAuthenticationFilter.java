@@ -1,29 +1,25 @@
 package com.taskhub.common.security;
 
-import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
+    private final JwtParser jwtParser;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserDetailsService userDetailsService) {
-        this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
+    public JwtAuthenticationFilter(JwtParser jwtParser) {
+        this.jwtParser = jwtParser;
     }
 
     @Override
@@ -31,20 +27,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
-            authenticate(header.substring(7));
+            // Invalid token: we continue unauthenticated and the chain answers 401.
+            jwtParser.parse(header.substring(7)).ifPresent(this::authenticate);
         }
         chain.doFilter(request, response);
     }
 
-    private void authenticate(String jwt) {
-        try {
-            UserDetails user = userDetailsService.loadUserByUsername(jwtService.extractUsername(jwt));
-            if (jwtService.isValid(jwt, user)) {
-                var auth = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(auth);
-            }
-        } catch (JwtException | IllegalArgumentException | UsernameNotFoundException e) {
-            // Invalid token or unknown user: continue unauthenticated and the chain answers 401.
-        }
+    private void authenticate(JwtPrincipal principal) {
+        var authority = new SimpleGrantedAuthority("ROLE_" + principal.role());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, List.of(authority)));
     }
 }

@@ -56,9 +56,17 @@ class SecurityApiTest {
                 .andExpect(jsonPath("$.role").value("USER"))
                 .andExpect(jsonPath("$.email").doesNotExist())
                 .andExpect(jsonPath("$.password").doesNotExist());
+        mvc.perform(get("/users/2")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void userSummaryOfAnotherUserIsOnlyForAdmins() throws Exception {
+        mvc.perform(get("/users/1").header("Authorization", TestTokens.luis(mvc)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/users/2").header("Authorization", TestTokens.ana(mvc)))
+                .andExpect(status().isOk());
         mvc.perform(get("/users/999").header("Authorization", TestTokens.ana(mvc)))
                 .andExpect(status().isNotFound());
-        mvc.perform(get("/users/2")).andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -35,12 +35,12 @@ public class AuthService implements RegisterUserUseCase, LoginUseCase {
             throw new EmailAlreadyUsedException(email);
         }
         User saved = users.save(User.register(name, email, passwordHasher.hash(rawPassword)));
-        return tokenIssuer.issue(saved.getEmail(), saved.getRole());
+        return tokenIssuer.issue(saved.getId(), saved.getEmail(), saved.getRole());
     }
 
     @Override
     public String login(String email, String rawPassword) {
         AuthenticatedUser user = authenticator.authenticate(email, rawPassword);
-        return tokenIssuer.issue(email, user.role());
+        return tokenIssuer.issue(user.id(), email, user.role());
     }
 }

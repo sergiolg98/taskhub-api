@@ -1,11 +1,10 @@
 package com.taskhub.task.application;
 
-import com.taskhub.auth.domain.model.AuthenticatedUser;
-import com.taskhub.auth.domain.model.Role;
 import com.taskhub.task.application.port.out.NotificationPort;
 import com.taskhub.task.application.port.out.TaskRepositoryPort;
 import com.taskhub.task.application.service.TaskService;
 import com.taskhub.task.domain.exception.TaskNotFoundException;
+import com.taskhub.task.domain.model.Requester;
 import com.taskhub.task.domain.model.Task;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,16 +24,16 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTest {
 
-    private static final AuthenticatedUser LUIS = new AuthenticatedUser(2L, Role.USER);
-    private static final AuthenticatedUser EVA = new AuthenticatedUser(3L, Role.USER);
-    private static final AuthenticatedUser ANA = new AuthenticatedUser(1L, Role.ADMIN);
+    private static final Requester LUIS = new Requester(2L, false);
+    private static final Requester EVA = new Requester(3L, false);
+    private static final Requester ANA = new Requester(1L, true);
 
     @Mock TaskRepositoryPort tasks;
     @Mock NotificationPort notifications;
     @InjectMocks TaskService service;
 
     @Test
-    void createStoresTheTaskForTheAuthenticatedUserAndNotifies() {
+    void createStoresTheTaskForTheRequesterAndNotifies() {
         when(tasks.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Task created = service.create("Preparar clase", null, LUIS);
