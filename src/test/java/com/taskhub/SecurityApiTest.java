@@ -48,6 +48,20 @@ class SecurityApiTest {
     }
 
     @Test
+    void userSummaryExposesOnlyIdNameAndRole() throws Exception {
+        mvc.perform(get("/users/2").header("Authorization", TestTokens.luis(mvc)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(2))
+                .andExpect(jsonPath("$.name").value("Luis User"))
+                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.email").doesNotExist())
+                .andExpect(jsonPath("$.password").doesNotExist());
+        mvc.perform(get("/users/999").header("Authorization", TestTokens.ana(mvc)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/users/2")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void registerThenLoginAndDuplicateEmail() throws Exception {
         String body = "{\"name\":\"Eva\",\"email\":\"eva@taskhub.com\",\"password\":\"Secret123\"}";
         mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
