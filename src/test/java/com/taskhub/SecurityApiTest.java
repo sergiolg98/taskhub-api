@@ -104,6 +104,20 @@ class SecurityApiTest {
     }
 
     @Test
+    void passwordSizeIsMeasuredInBytesBecauseBcryptStopsAt72() throws Exception {
+        String tooLong = "ñ".repeat(40);   // 40 characters but 80 bytes
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8")
+                        .content("{\"name\":\"Bytes\",\"email\":\"bytes@taskhub.com\",\"password\":\"" + tooLong + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]").value("password: must not exceed 72 bytes in UTF-8"));
+
+        String fits = "ñ".repeat(36);      // exactly 72 bytes
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8")
+                        .content("{\"name\":\"Bytes\",\"email\":\"bytes@taskhub.com\",\"password\":\"" + fits + "\"}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void jwtFilterLivesOnlyInsideTheSecurityChain() {
         // A Filter bean is also registered by Spring Boot as a servlet filter, so it would run twice.
         assertThat(context.getBeanNamesForType(JwtAuthenticationFilter.class)).isEmpty();
