@@ -9,3 +9,5 @@ curl localhost:8888/task-service/dev
 ```
 
 La variante de producción sería el backend Git (`spring.cloud.config.server.git.uri`); aquí se usa archivos para funcionar sin red. Ver el [README raíz](../README.md).
+
+Imagen: `docker build -t taskhub/config-server .` (puerto 8888, usuario no root, `HEALTHCHECK` en `/actuator/health`). Ver el [README raíz](../README.md#docker-clase-12).
