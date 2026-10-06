@@ -56,6 +56,9 @@ class GatewayRoutingTest {
         r.add(P + "routes[2].id", () -> "dead-service");
         r.add(P + "routes[2].uri", () -> "http://localhost:" + deadPort);
         r.add(P + "routes[2].predicates[0]", () -> "Path=/dead/**");
+        r.add(P + "routes[3].id", () -> "gone-service");
+        r.add(P + "routes[3].uri", () -> "http://no-such-service.invalid:8081");   // a name that does not resolve
+        r.add(P + "routes[3].predicates[0]", () -> "Path=/gone/**");
         r.add(P + "globalcors.cors-configurations.[/**].allowed-origins", () -> "http://localhost:3000");
         r.add(P + "globalcors.cors-configurations.[/**].allowed-methods", () -> "GET,POST");
         r.add(P + "globalcors.cors-configurations.[/**].allowed-headers", () -> "Authorization,Content-Type");
@@ -130,6 +133,14 @@ class GatewayRoutingTest {
                 .expectBody().jsonPath("$.status").isEqualTo(503)
                 .jsonPath("$.message").isEqualTo("Service Unavailable")
                 .jsonPath("$.timestamp").exists();
+    }
+
+    @Test
+    void aServiceNameThatNoLongerResolvesIs503NotA500() {
+        // A stopped container disappears from Docker's DNS: the lookup fails instead of the connection being refused.
+        client.get().uri("/gone/x").header(HttpHeaders.AUTHORIZATION, "Bearer x").exchange()
+                .expectStatus().isEqualTo(503)
+                .expectBody().jsonPath("$.status").isEqualTo(503).jsonPath("$.message").isEqualTo("Service Unavailable");
     }
 
     @Test

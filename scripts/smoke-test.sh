@@ -148,8 +148,13 @@ for _ in $(seq 1 40); do   # arranque de auth-service + los 10 s del circuito ab
 done
 [ "$recovered" = 1 ] && ok "al volver auth-service, el circuito se cierra y las tareas vuelven a verificarse" || bad "recuperación tras el fallo" "ownerVerified=true en <80 s" "${BODY:0:120}"
 # el gateway debe volver a encontrar a auth-service aunque el contenedor haya cambiado de IP (DNS cacheado, hallazgo de la clase 14)
-LUIS=""
-for _ in $(seq 1 30); do LUIS="$(login luis@taskhub.com def456)"; [ -n "$LUIS" ] && [ "$CODE" = 200 ] && break; sleep 2; done
+# (req y no login: login corre en una subshell y su $CODE no llegaría aquí)
+for _ in $(seq 1 30); do
+  req POST /auth/login "" '{"email":"luis@taskhub.com","password":"def456"}'
+  [ "$CODE" = 200 ] && break
+  sleep 2
+done
+LUIS="$(json_field token)"
 [ "$CODE" = 200 ] && ok "el gateway vuelve a alcanzar a auth-service (/auth/login -> 200)" || bad "el gateway alcanza a auth-service tras reiniciarlo" "HTTP 200 en <60 s" "HTTP $CODE"
 # limpieza de lo creado por la prueba
 req GET /tasks "$LUIS"
