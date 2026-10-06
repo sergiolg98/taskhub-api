@@ -1,6 +1,7 @@
 package com.taskhub.application.service;
 
 import com.taskhub.application.port.in.TaskUseCase;
+import com.taskhub.application.port.out.NotificationPort;
 import com.taskhub.application.port.out.TaskRepositoryPort;
 import com.taskhub.domain.exception.TaskNotFoundException;
 import com.taskhub.domain.model.AuthenticatedUser;
@@ -16,14 +17,18 @@ import java.util.List;
 public class TaskService implements TaskUseCase {
 
     private final TaskRepositoryPort taskRepository;
+    private final NotificationPort notifications;
 
-    public TaskService(TaskRepositoryPort taskRepository) {
+    public TaskService(TaskRepositoryPort taskRepository, NotificationPort notifications) {
         this.taskRepository = taskRepository;
+        this.notifications = notifications;
     }
 
     @Override
     public Task create(String title, String description, AuthenticatedUser user) {
-        return taskRepository.save(Task.create(title, description, user.id()));
+        Task created = taskRepository.save(Task.create(title, description, user.id()));
+        notifications.notifyTaskCreated(created);
+        return created;
     }
 
     @Override
