@@ -32,6 +32,11 @@ public class TaskPersistenceAdapter implements TaskRepositoryPort {
     }
 
     @Override
+    public List<Task> findAll() {
+        return repository.findAll().stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public void deleteById(Long id) {
         repository.deleteById(id);
     }

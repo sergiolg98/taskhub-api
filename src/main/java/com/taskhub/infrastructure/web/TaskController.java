@@ -1,10 +1,12 @@
 package com.taskhub.infrastructure.web;
 
 import com.taskhub.application.port.in.TaskUseCase;
+import com.taskhub.infrastructure.security.SecurityUser;
 import com.taskhub.infrastructure.web.dto.*;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -20,37 +22,40 @@ public class TaskController {
         this.taskUseCase = taskUseCase;
     }
 
-    // Versión base: sin autenticación, el dueño se filtra con ?ownerId=. Con JWT saldrá del token.
     @GetMapping
-    public List<TaskResponse> list(@RequestParam Long ownerId) {
-        return taskUseCase.listByOwner(ownerId).stream().map(TaskResponse::from).toList();
+    public List<TaskResponse> list(@AuthenticationPrincipal SecurityUser principal) {
+        return taskUseCase.listMine(principal.toAuthenticatedUser()).stream().map(TaskResponse::from).toList();
     }
 
     @GetMapping("/{id}")
-    public TaskResponse get(@PathVariable Long id) {
-        return TaskResponse.from(taskUseCase.getById(id));
+    public TaskResponse get(@PathVariable Long id, @AuthenticationPrincipal SecurityUser principal) {
+        return TaskResponse.from(taskUseCase.getById(id, principal.toAuthenticatedUser()));
     }
 
     @PostMapping
-    public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest request) {
+    public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest request,
+                                               @AuthenticationPrincipal SecurityUser principal) {
         TaskResponse created = TaskResponse.from(
-                taskUseCase.create(request.title(), request.description(), request.ownerId()));
+                taskUseCase.create(request.title(), request.description(), principal.toAuthenticatedUser()));
         return ResponseEntity.created(URI.create("/tasks/" + created.id())).body(created);
     }
 
     @PutMapping("/{id}")
-    public TaskResponse update(@PathVariable Long id, @Valid @RequestBody UpdateTaskRequest request) {
-        return TaskResponse.from(taskUseCase.update(id, request.title(), request.description()));
+    public TaskResponse update(@PathVariable Long id, @Valid @RequestBody UpdateTaskRequest request,
+                               @AuthenticationPrincipal SecurityUser principal) {
+        return TaskResponse.from(taskUseCase.update(id, request.title(), request.description(),
+                principal.toAuthenticatedUser()));
     }
 
     @PatchMapping("/{id}/status")
-    public TaskResponse changeStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest request) {
-        return TaskResponse.from(taskUseCase.changeStatus(id, request.status()));
+    public TaskResponse changeStatus(@PathVariable Long id, @Valid @RequestBody UpdateStatusRequest request,
+                                     @AuthenticationPrincipal SecurityUser principal) {
+        return TaskResponse.from(taskUseCase.changeStatus(id, request.status(), principal.toAuthenticatedUser()));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
-        taskUseCase.delete(id);
+    public void delete(@PathVariable Long id, @AuthenticationPrincipal SecurityUser principal) {
+        taskUseCase.delete(id, principal.toAuthenticatedUser());
     }
 }
