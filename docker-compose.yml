@@ -1,11 +1,11 @@
-# Solo la base de datos del monolito. Los demás servicios se agregan en clases posteriores.
-# Las variables se leen del archivo .env (ver .env.example).
+# Development database: ONE MySQL server with two schemas (auth_db, task_db), created by docker/mysql-init.
+# The services themselves run with ./mvnw spring-boot:run; the full Compose arrives in class 13.
+# Variables are read from the .env file (see .env.example).
 services:
   mysql:
     image: mysql:8.4
     container_name: taskhub-mysql
     environment:
-      MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
@@ -13,6 +13,7 @@ services:
       - "${DB_PORT}:3306"
     volumes:
       - taskhub-mysqldata:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${DB_USER}", "-p${DB_PASSWORD}"]
       interval: 5s

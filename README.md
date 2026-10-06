@@ -1,8 +1,15 @@
-# TaskHub — snapshot `05-expert-final-reviewed`
+# TaskHub — snapshot `07-microservices`
 
-Proyecto guía del curso: monolito Spring Boot con arquitectura hexagonal, JPA y MySQL.
-Mismo diseño que `04-expert-final`, tras un **code review** que corrigió 6 defectos reales (identidad por email, filtro JWT duplicado,
-límite de BCrypt en bytes, formato de error único, `IllegalArgumentException` como 400, carrera en el registro).
+Proyecto guía del curso. El monolito de `05-expert-final-reviewed` se divide en **dos servicios independientes**,
+cada uno con su proyecto Maven, su base de datos y su arranque:
+
+| Servicio | Puerto | Base de datos | Responsabilidad |
+|---|---|---|---|
+| [`auth-service`](auth-service/) | 8081 | `auth_db` | registro, login, emisión del JWT, usuarios |
+| [`task-service`](task-service/) | 8082 | `task_db` | tareas, regla de propiedad, endpoints de admin |
+
+No hay `pom.xml` padre ni clases compartidas: cada servicio lleva su **propia copia** de `common` (validación del token, formato de error).
+Se hace así a propósito: compartir código entre servicios los acopla.
 
 ## Requisitos
 
@@ -13,16 +20,21 @@ límite de BCrypt en bytes, formato de error único, `IllegalArgumentException` 
 
 ```bash
 cp .env.example .env                  # una sola vez
-docker compose up -d                  # MySQL en localhost:3306
-export JWT_SECRET='un-secreto-de-al-menos-32-caracteres-para-hs256'
-./mvnw spring-boot:run                # API en http://localhost:8080
-./mvnw test                           # tests con H2, no necesitan Docker
+docker compose up -d                  # un MySQL con dos esquemas: auth_db y task_db
+export JWT_SECRET='un-secreto-de-al-menos-32-caracteres-para-hs256'   # el MISMO para los dos servicios
+
+(cd auth-service && ./mvnw spring-boot:run)    # terminal 1 → http://localhost:8081
+(cd task-service && ./mvnw spring-boot:run)    # terminal 2 → http://localhost:8082
+(cd auth-service && ./mvnw test); (cd task-service && ./mvnw test)   # tests con H2, sin Docker
 ```
 
-`JWT_SECRET` es obligatorio: sin él la app no arranca (falla rápido a propósito). Es texto plano, mínimo 32 bytes (HS256).
-Flyway crea las tablas y dos usuarios de ejemplo (ver abajo) en el primer arranque.
+> Si ya tenías el volumen de MySQL de las clases anteriores, el script que crea `auth_db` y `task_db` no se ejecuta
+> (solo corre con el volumen vacío). Haz `docker compose down -v && docker compose up -d` (borra los datos de desarrollo).
 
-## Usuarios de ejemplo (solo desarrollo)
+`JWT_SECRET` es obligatorio en ambos servicios (falla rápido si falta). Es texto plano, mínimo 32 bytes (HS256).
+Flyway crea las tablas de cada servicio en su primer arranque; `auth-service` siembra dos usuarios (ver abajo).
+
+## Usuarios de ejemplo (solo desarrollo, en `auth-service`)
 
 | id | email | rol | contraseña |
 |---|---|---|---|
@@ -31,64 +43,52 @@ Flyway crea las tablas y dos usuarios de ejemplo (ver abajo) en el primer arranq
 
 ## Endpoints
 
+**auth-service (8081)**
+
 | Método | Ruta | Acceso | Descripción |
 |---|---|---|---|
 | POST | `/auth/register` | público | Crea un usuario (siempre `USER`) y devuelve un token |
 | POST | `/auth/login` | público | Devuelve un token |
+| GET | `/users/{id}` | el propio usuario o `ADMIN` | `UserSummary` (id, name, role) |
+| GET | `/admin/users` | `ADMIN` | Lista de usuarios |
+
+**task-service (8082)**
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
 | GET | `/tasks` | autenticado | Tareas del usuario del token |
 | GET | `/tasks/{id}` | dueño o `ADMIN` | Detalle (404 si no es tuya) |
-| POST | `/tasks` | autenticado | Crear (`title`, `description`); el dueño sale del token |
+| POST | `/tasks` | autenticado | Crear; el dueño sale del claim `uid` del token |
 | PUT | `/tasks/{id}` | dueño o `ADMIN` | Actualizar título y descripción |
 | PATCH | `/tasks/{id}/status` | dueño o `ADMIN` | `PENDING`, `IN_PROGRESS`, `COMPLETED` |
 | DELETE | `/tasks/{id}` | dueño o `ADMIN` | Eliminar |
-| GET | `/users/{id}` | uno mismo o `ADMIN` | Resumen público: `id`, `name`, `role` (contrato entre áreas) |
-| GET | `/admin/users` | `ADMIN` | Lista de usuarios (sin contraseña) |
 | GET | `/admin/tasks` | `ADMIN` | Todas las tareas |
 
 ```bash
-TOKEN=$(curl -s -X POST localhost:8080/auth/login -H 'Content-Type: application/json' \
+TOKEN=$(curl -s -X POST localhost:8081/auth/login -H 'Content-Type: application/json' \
   -d '{"email":"luis@taskhub.com","password":"def456"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 
-curl -X POST localhost:8080/tasks -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-  -d '{"title":"Preparar clase"}'
-curl localhost:8080/tasks -H "Authorization: Bearer $TOKEN"
+curl -X POST localhost:8082/tasks -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+  -d '{"title":"Preparar clase"}'                       # el token se emite en 8081 y se usa en 8082
+curl localhost:8082/tasks -H "Authorization: Bearer $TOKEN"
 ```
 
-Códigos: `401` sin token, token inválido o credenciales erróneas · `403` rol insuficiente · `404` recurso inexistente
-**o ajeno** (no se confirma que exista) · `409` email ya registrado · `400` validación · `405`/`415`/`500` genéricos.
-Todos los errores usan el mismo formato `ErrorResponse` (`status`, `message`, `details`, `timestamp`).
+Los códigos de error son los de siempre (`401`, `403`, `404`, `409`, `400`) y todos usan el mismo formato `ErrorResponse`.
+
+## Cómo se relacionan los dos servicios
+
+- **El token es el único contrato.** `auth-service` lo firma (HS256) con claims `sub`, `uid` y `role`; `task-service` solo comprueba la firma y la
+  caducidad con el mismo `JWT_SECRET` y construye el usuario **solo desde los claims**. No hay llamadas entre servicios.
+- **`tasks.owner_id` no tiene clave foránea.** `users` vive en otra base de datos y una restricción no cruza bases.
+- **Pérdida consciente:** `task-service` ya no comprueba que el dueño exista (antes: `OwnerNotFoundException`, 404). Vuelve en la clase 10 con una llamada HTTP.
+- **`task-service` sigue funcionando con `auth-service` apagado** para los tokens ya emitidos (verificado).
+- Trade-off del secreto compartido: quien conoce `JWT_SECRET` puede *firmar* tokens, no solo validarlos. Con RSA (clave privada en auth, pública en task) solo `auth-service` firma; se comenta en clase.
 
 ## Arquitectura
 
-```text
-com.taskhub
-├── auth      identidad: domain · application (port.in/out, service) · infrastructure (web, persistence, security)
-├── task      trabajo:   domain · application (port.in/out, service) · infrastructure (web, persistence, notification, lookup)
-├── common    token (JwtParser, filtro, JwtPrincipal), SecurityConfig, formato de errores
-└── TaskHubApplication
-```
-
-Reglas (las comprueba `ArchitectureTest` en cada `mvn test`):
-
-- `auth` no conoce a `task`; `common` no conoce a ninguna de las dos.
-- `task` solo conoce a `auth` en `task.infrastructure.lookup` (el adaptador de `UserLookupPort`). Es la única arista entre las áreas.
-- Dentro de cada área: `domain` no conoce frameworks, `application` solo conoce puertos.
-
-## Patrones y dónde verlos
-
-| Patrón / principio | Dónde |
-|---|---|
-| Repository | `TaskRepositoryPort`, `UserRepositoryPort` |
-| Adapter | `*PersistenceAdapter`, `SpringPasswordHasher`, `JwtTokenIssuer`, `SpringCredentialsAuthenticator`, `NotificationAdapter`, `UserLookupLocalAdapter` |
-| Strategy + Factory | `NotificationStrategy` (`log` \| `email`) + `NotificationStrategyFactory`, elegida con `taskhub.notifications.type` |
-| DIP | los servicios dependen de puertos; `UserLookupPort` oculta si el usuario se consulta en proceso o por red |
-| SRP | `JwtTokenIssuer` firma (auth); `JwtParser` valida (common) |
-
-## Pruebas
-
-`./mvnw test` (48 tests, usan H2): unitarias de casos de uso con puertos simulados, `JwtParserTest`, `NotificationStrategyFactoryTest`,
-`ArchitectureTest` y las de API (`TaskApiTest`, `SecurityApiTest`) que prueban el comportamiento completo.
+Cada servicio mantiene la hexagonal de siempre (`domain` · `application` · `infrastructure`) más su `common`. `ArchitectureTest` (en cada servicio) lo comprueba;
+en `task-service` además prohíbe cualquier dependencia de `com.taskhub.auth..`.
 
 ## Pendiente a propósito (clases siguientes)
 
-Revisión (clase 5) y separación física en microservicios (clase 7 en adelante).
+Config Server (08), API Gateway (09), comunicación entre servicios (10), resiliencia (11), Docker (12), Compose y Jenkins (13), integración (14).
