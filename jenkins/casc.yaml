@@ -1,0 +1,32 @@
+# Configuration as Code: Jenkins arranca ya configurado, sin clics. Variables: ver jenkins/docker-compose.yml
+jenkins:
+  systemMessage: "TaskHub CI - laboratorio de la clase 13"
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+jobs:
+  # "Pipeline as code": el job solo apunta al repositorio; los stages viven en el Jenkinsfile de la raíz.
+  - script: >
+      pipelineJob('taskhub') {
+        description('Build, test, package y docker build de los cuatro servicios')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote { url('${TASKHUB_REPO_URL}') }
+                branch('${TASKHUB_BRANCH}')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(true)
+          }
+        }
+      }
