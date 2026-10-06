@@ -1,7 +1,7 @@
-# TaskHub — snapshot `01-jwt-security`
+# TaskHub — snapshot `02-patterns`
 
 Proyecto guía del curso: monolito Spring Boot con arquitectura hexagonal, JPA y MySQL.
-Este snapshot añade **Spring Security + JWT**: registro, login, roles, propiedad de tareas por usuario y endpoints admin.
+Mismo comportamiento y endpoints que `01-jwt-security`, con el diseño interno refinado: registro/login en la capa de aplicación, **Strategy + Factory** de notificaciones y reglas de arquitectura ejecutables (**ArchUnit**).
 
 ## Requisitos
 
@@ -60,16 +60,52 @@ Códigos: `401` sin token, token inválido o credenciales erróneas · `403` rol
 ```text
 com.taskhub
 ├── domain            model (User, Task, Role, TaskStatus, AuthenticatedUser) y exception
-├── application       port.in (TaskUseCase, AdminUseCase), port.out (repositorios), service
-├── infrastructure    web (controllers, DTOs, errores) · persistence (JPA + adapters)
-│                     security (SecurityConfig, JwtService, filtro JWT, UserDetailsService)
+├── application
+│   ├── port.in       TaskUseCase, AdminUseCase, RegisterUserUseCase, LoginUseCase
+│   ├── port.out      TaskRepositoryPort, UserRepositoryPort, NotificationPort,
+│   │                 PasswordHasherPort, TokenIssuerPort, CredentialsAuthenticatorPort
+│   └── service       TaskService, AdminService, AuthService
+├── infrastructure
+│   ├── web           controllers, DTOs, GlobalExceptionHandler
+│   ├── persistence   entidades JPA + adapters (Repository / Adapter)
+│   ├── security      SecurityConfig, JwtService, filtro JWT + adapters de los puertos de auth
+│   └── notification  NotificationStrategy (log | email), NotificationStrategyFactory, NotificationAdapter
 └── TaskHubApplication
 ```
 
-- La regla de propiedad de las tareas vive en `TaskService` (caso de uso), no en el controller.
-- El filtro JWT solo identifica; quien responde 401/403 es la cadena de seguridad (`SecurityErrorHandler`).
-- Sesión `STATELESS`: cada petición trae su token.
+Flujo de una petición: `Controller → Input Port → Application Service → Output Port → Adapter`.
+Todas las dependencias apuntan hacia el dominio; `ArchitectureTest` lo comprueba en cada `mvn test`.
+
+## Patrones y dónde verlos
+
+| Patrón / principio | Dónde |
+|---|---|
+| Repository | `TaskRepositoryPort`, `UserRepositoryPort` |
+| Adapter | `TaskPersistenceAdapter`, `UserPersistenceAdapter` (JPA ↔ dominio), `SpringPasswordHasher`, `JwtTokenIssuer`, `SpringCredentialsAuthenticator`, `NotificationAdapter` |
+| Strategy | `NotificationStrategy` → `LogNotificationStrategy`, `EmailNotificationStrategy` |
+| Factory | `NotificationStrategyFactory.forType(type)` |
+| DIP | `AuthService` y `TaskService` dependen de puertos, no de Spring Security, JJWT ni JPA |
+| OCP | una estrategia nueva = una clase nueva; la factory recibe todas las `NotificationStrategy` por inyección |
+| SRP | `AuthService` (casos de uso) / `JwtService` (tokens) / `SecurityConfig` (cadena de filtros) |
+| DI | siempre por constructor y `final`; `ArchitectureTest` prohíbe `@Autowired` en campos |
+
+## Notificaciones
+
+Al crear una tarea se notifica por el puerto `NotificationPort`. La estrategia se elige por configuración:
+
+```properties
+taskhub.notifications.type=log     # log | email (el email es simulado: solo escribe en el log)
+```
+
+Un valor desconocido hace fallar el arranque con la lista de tipos disponibles.
+
+## Pruebas
+
+- `AuthServiceTest`, `TaskServiceTest`: unitarias, sin Spring ni HTTP (solo puertos con Mockito).
+- `NotificationStrategyFactoryTest`: la factory y su error con un tipo desconocido.
+- `ArchitectureTest`: `domain` no conoce frameworks; `application` no conoce JPA/web/security/JJWT; controllers no tocan `persistence`.
+- `TaskApiTest`, `SecurityApiTest`: de la clase 1, **sin cambios** (prueban que el refactor no alteró el comportamiento).
 
 ## Pendiente a propósito (clases siguientes)
 
-Patrones de diseño (clase 2), fronteras entre dominios (clase 4), microservicios (clase 7 en adelante).
+Fronteras entre dominios `auth` y `task` (clase 4), microservicios (clase 7 en adelante).
