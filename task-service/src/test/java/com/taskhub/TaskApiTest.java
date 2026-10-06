@@ -20,7 +20,7 @@ class TaskApiTest {
 
     @Test
     void crudLifecycle() throws Exception {
-        String auth = TestTokens.luis(mvc);
+        String auth = TestTokens.luis();
         String location = mvc.perform(post("/tasks").header("Authorization", auth)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"Preparar clase\",\"description\":\"d\"}"))
@@ -44,7 +44,7 @@ class TaskApiTest {
 
     @Test
     void rejectsBlankTitle() throws Exception {
-        mvc.perform(post("/tasks").header("Authorization", TestTokens.luis(mvc))
+        mvc.perform(post("/tasks").header("Authorization", TestTokens.luis())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"\"}"))
                 .andExpect(status().isBadRequest());
     }

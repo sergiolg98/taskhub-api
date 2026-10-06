@@ -1,7 +1,5 @@
 package com.taskhub.common.security;
 
-import com.taskhub.auth.domain.model.Role;
-import com.taskhub.auth.infrastructure.security.JwtTokenIssuer;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
@@ -11,37 +9,35 @@ import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Issuer and parser are separate on purpose: a service that only validates tokens never needs the issuer.
+// This service only validates tokens. The tests sign them by hand, the way auth-service does (claims uid and role).
 class JwtParserTest {
 
     private static final String SECRET = "a-test-secret-with-more-than-thirty-two-bytes";
 
     private final JwtParser parser = new JwtParser(SECRET);
-    private final JwtTokenIssuer issuer = new JwtTokenIssuer(SECRET, 5);
 
     @Test
     void validTokenYieldsThePrincipalFromItsClaimsOnly() {
-        String token = issuer.issue(2L, "luis@taskhub.com", Role.USER);
+        String token = sign(SECRET, 2L, "luis@taskhub.com", "USER");
 
         assertThat(parser.parse(token)).contains(new JwtPrincipal(2L, "luis@taskhub.com", "USER"));
     }
 
     @Test
     void adminRoleIsRecognised() {
-        String token = issuer.issue(1L, "ana@taskhub.com", Role.ADMIN);
+        String token = sign(SECRET, 1L, "ana@taskhub.com", "ADMIN");
 
         assertThat(parser.parse(token)).get().extracting(JwtPrincipal::isAdmin).isEqualTo(true);
     }
 
     @Test
     void tamperedTokenIsRejected() {
-        assertThat(parser.parse(issuer.issue(2L, "luis@taskhub.com", Role.USER) + "x")).isEmpty();
+        assertThat(parser.parse(sign(SECRET, 2L, "luis@taskhub.com", "USER") + "x")).isEmpty();
     }
 
     @Test
     void tokenSignedWithAnotherSecretIsRejected() {
-        String token = new JwtTokenIssuer("another-secret-with-more-than-thirty-two-bytes", 5)
-                .issue(2L, "luis@taskhub.com", Role.USER);
+        String token = sign("another-secret-with-more-than-thirty-two-bytes", 2L, "luis@taskhub.com", "USER");
 
         assertThat(parser.parse(token)).isEmpty();
     }
@@ -68,5 +64,12 @@ class JwtParserTest {
     @Test
     void garbageIsRejected() {
         assertThat(parser.parse("not-a-jwt")).isEmpty();
+    }
+
+    private static String sign(String secret, Long uid, String email, String role) {
+        return Jwts.builder().subject(email).claim("uid", uid).claim("role", role)
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+                .compact();
     }
 }

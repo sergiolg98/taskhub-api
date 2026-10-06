@@ -11,10 +11,10 @@
     </parent>
 
     <groupId>com.taskhub</groupId>
-    <artifactId>taskhub</artifactId>
+    <artifactId>task-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>taskhub</name>
-    <description>TaskHub - proyecto guía evolutivo (snapshot 00-base)</description>
+    <name>task-service</name>
+    <description>TaskHub task-service: tasks, ownership rules and admin endpoints</description>
 
     <properties>
         <java.version>21</java.version>

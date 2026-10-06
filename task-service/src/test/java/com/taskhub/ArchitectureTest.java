@@ -39,23 +39,16 @@ class ArchitectureTest {
             .that().resideInAPackage("..infrastructure.persistence..")
             .should().dependOnClassesThat().resideInAnyPackage("..infrastructure.web..", "..infrastructure.security..");
 
-    // Boundaries between business areas: the preparation for splitting them into services.
-    @ArchTest
-    static final ArchRule taskAreaOnlyKnowsAuthThroughItsLookupAdapter = noClasses()
-            .that().resideInAPackage("com.taskhub.task..")
-            .and().resideOutsideOfPackage("com.taskhub.task.infrastructure.lookup..")
-            .should().dependOnClassesThat().resideInAPackage("com.taskhub.auth..");
-
-    @ArchTest
-    static final ArchRule authAreaDoesNotKnowTasks = noClasses()
-            .that().resideInAPackage("com.taskhub.auth..")
-            .should().dependOnClassesThat().resideInAPackage("com.taskhub.task..");
-
     // common holds what every service will need its own copy of (token validation, error format).
     @ArchTest
     static final ArchRule commonDoesNotKnowBusinessAreas = noClasses()
             .that().resideInAPackage("com.taskhub.common..")
-            .should().dependOnClassesThat().resideInAnyPackage("com.taskhub.auth..", "com.taskhub.task..");
+            .should().dependOnClassesThat().resideInAnyPackage("com.taskhub.task..");
+
+    // task-service must not know the auth-service code: they only share the JWT contract (claims), never classes.
+    @ArchTest
+    static final ArchRule nothingKnowsTheAuthService = noClasses()
+            .should().dependOnClassesThat().resideInAPackage("com.taskhub.auth..");
 
     @ArchTest
     static final ArchRule dependenciesAreInjectedByConstructor = NO_CLASSES_SHOULD_USE_FIELD_INJECTION;

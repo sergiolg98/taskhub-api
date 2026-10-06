@@ -1,28 +1,35 @@
 package com.taskhub;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 
+// task-service has no login: tests sign the tokens the way auth-service would (same secret, claims uid and role).
 final class TestTokens {
+
+    private static final String SECRET = "test-secret-for-jwt-tests-must-be-at-least-32-bytes-long";
 
     private TestTokens() {
     }
 
-    static String login(MockMvc mvc, String email, String password) throws Exception {
-        String body = mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
-                .andReturn().getResponse().getContentAsString();
-        return new ObjectMapper().readTree(body).get("token").asText();
+    static String token(Long userId, String email, String role) {
+        return "Bearer " + Jwts.builder().subject(email).claim("uid", userId).claim("role", role)
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+                .compact();
     }
 
-    static String luis(MockMvc mvc) throws Exception {
-        return "Bearer " + login(mvc, "luis@taskhub.com", "def456");
+    static String luis() {
+        return token(2L, "luis@taskhub.com", "USER");
     }
 
-    static String ana(MockMvc mvc) throws Exception {
-        return "Bearer " + login(mvc, "ana@taskhub.com", "abc123");
+    static String eva() {
+        return token(3L, "eva@taskhub.com", "USER");
+    }
+
+    static String ana() {
+        return token(1L, "ana@taskhub.com", "ADMIN");
     }
 }

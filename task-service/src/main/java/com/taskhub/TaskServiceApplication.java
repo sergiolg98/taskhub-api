@@ -4,9 +4,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class TaskHubApplication {
+public class TaskServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(TaskHubApplication.class, args);
+        SpringApplication.run(TaskServiceApplication.class, args);
     }
 }
