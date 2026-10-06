@@ -118,6 +118,25 @@ class SecurityApiTest {
     }
 
     @Test
+    void errorsGeneratedBySpringUseTheSameFormat() throws Exception {
+        String luis = TestTokens.luis(mvc);
+        mvc.perform(put("/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405))
+                .andExpect(jsonPath("$.message").value("Method Not Allowed"));
+        mvc.perform(post("/auth/login").contentType(MediaType.TEXT_PLAIN).content("x"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.message").value("Unsupported Media Type"));
+        mvc.perform(get("/nope").header("Authorization", luis))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Not Found"));
+        mvc.perform(get("/tasks/abc").header("Authorization", luis))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'id'"));
+    }
+
+    @Test
     void jwtFilterLivesOnlyInsideTheSecurityChain() {
         // A Filter bean is also registered by Spring Boot as a servlet filter, so it would run twice.
         assertThat(context.getBeanNamesForType(JwtAuthenticationFilter.class)).isEmpty();
