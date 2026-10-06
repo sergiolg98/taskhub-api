@@ -1,5 +1,6 @@
 package com.taskhub.infrastructure.security;
 
+import com.taskhub.domain.model.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -27,12 +28,11 @@ public class JwtService {
         this.expiration = Duration.ofMinutes(expirationMinutes);
     }
 
-    public String generateToken(UserDetails user) {
+    public String generateToken(String email, Role role) {
         Instant now = Instant.now();
-        String authority = user.getAuthorities().iterator().next().getAuthority();
         return Jwts.builder()
-                .subject(user.getUsername())
-                .claim("role", authority.substring("ROLE_".length()))
+                .subject(email)
+                .claim("role", role.name())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(expiration)))
                 .signWith(key, Jwts.SIG.HS256)
