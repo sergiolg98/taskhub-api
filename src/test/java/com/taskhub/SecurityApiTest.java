@@ -40,6 +40,14 @@ class SecurityApiTest {
     }
 
     @Test
+    void adminTasksAreOnlyForAdmins() throws Exception {
+        mvc.perform(get("/admin/tasks").header("Authorization", TestTokens.luis(mvc)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/admin/tasks").header("Authorization", TestTokens.ana(mvc)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void registerThenLoginAndDuplicateEmail() throws Exception {
         String body = "{\"name\":\"Eva\",\"email\":\"eva@taskhub.com\",\"password\":\"Secret123\"}";
         mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
