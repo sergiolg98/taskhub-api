@@ -45,6 +45,13 @@ class SecurityApiTest {
     }
 
     @Test
+    void actuatorHealthIsPublicAndNothingElseOfActuatorIsExposed() throws Exception {
+        mvc.perform(get("/actuator/health")).andExpect(status().isOk());
+        mvc.perform(get("/actuator/env").header("Authorization", TestTokens.ana(mvc)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void theDevDelayEndpointDoesNotExistOutsideTheDevProfile() throws Exception {
         mvc.perform(post("/admin/dev/delay").param("ms", "100").header("Authorization", TestTokens.ana(mvc)))
                 .andExpect(status().isNotFound());
