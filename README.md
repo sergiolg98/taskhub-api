@@ -1,4 +1,4 @@
-# TaskHub — snapshot `10-service-communication`
+# TaskHub — snapshot `11-resilience`
 
 Proyecto guía del curso. Dos servicios independientes (`07-microservices`), cada uno con su proyecto Maven y su base de datos,
 cuya configuración vive en un **Config Server** (`08-config-server`) y que ahora se usan a través de un **API Gateway** (`09-api-gateway`):
@@ -139,10 +139,34 @@ Al **crear una tarea**, `task-service` pregunta a `auth-service` si el dueño (e
 - **Hexagonal intacta:** el puerto `UserLookupPort` y los casos de uso son los de la clase 4; solo cambia el adaptador (`UserLookupLocalAdapter` → `UserLookupFeignAdapter`). El `@FeignClient` (`AuthClient`) vive en `task.infrastructure.lookup`, y ArchUnit impide que cualquier otro paquete conozca Feign.
 - **Contrato:** `GET /users/{id}` → `{id, name, role}` (nunca email ni contraseña). Lo **posee** `auth-service`; `task-service` mantiene su propia copia (`UserSummaryResponse`, `UserSummary`). Cero clases compartidas.
 - **La llamada va directa a `auth-service`** (`taskhub.auth-service.url` en `config-repo`), no por el gateway: es tráfico interno.
-- **Errores** (`AuthClientConfig`): `404` → el usuario no existe (`OwnerNotFoundException`, 404 al cliente); cualquier otro fallo (500, conexión rechazada, timeout, conexión cortada) → `ExternalServiceException` → **503** «User verification is temporarily unavailable» y no se guarda nada. «No existe» y «no puedo saberlo» son cosas distintas. No se lee el cuerpo del error (puede no ser JSON).
+- **Errores** (`AuthClientConfig`): `404` → el usuario no existe (`OwnerNotFoundException`, 404 al cliente); los fallos técnicos se tratan en la clase 11 (abajo). «No existe» y «no puedo saberlo» son cosas distintas. No se lee el cuerpo del error (puede no ser JSON).
 - **Propagación:** un `RequestInterceptor` reenvía `Authorization` (la llamada es en nombre del usuario; `auth-service` solo deja consultarse a uno mismo o a un ADMIN, y el dueño siempre es el propio solicitante) y `X-Request-Id`. La alternativa, credenciales de servicio, no se implementa.
-- **Timeouts** (`config-repo/task-service.properties`): `connect-timeout=2000`, `read-timeout=3000`. Sin reintentos (Feign usa `NEVER_RETRY`): la resiliencia es la clase 11.
+- **Timeouts** (`config-repo/task-service.properties`): `connect-timeout=1000`, `read-timeout=2000`. Feign no reintenta por sí mismo (`NEVER_RETRY`); los reintentos los pone Resilience4j (clase 11).
 - **Contrato y versionado:** si `auth-service` cambia el JSON, `task-service` lo descubre en ejecución. Añadir campos es compatible (se ignoran); quitarlos o renombrarlos no.
+
+## Resiliencia (clase 11)
+
+```text
+task-service → Retry( CircuitBreaker( OpenFeign con timeouts ) ) → auth-service
+                     └─ sin respuesta fiable → Fallback: Unavailable
+```
+
+Sobre la única llamada entre servicios (`UserLookupFeignAdapter.findById`), con Resilience4j (`resilience4j-spring-boot3`, anotaciones `@Retry` y `@CircuitBreaker`; se eligió sobre `spring-cloud-starter-circuitbreaker-resilience4j` porque da anotaciones, propiedades y Actuator sin más piezas). Parámetros en `config-repo/task-service.properties`:
+
+| Pieza | Valor | Por qué |
+|---|---|---|
+| Timeout (Feign) | conexión 1 s, lectura 2 s | menor que lo que el cliente esperaría; un auth colgado no retiene hilos |
+| Retry | 2 intentos, 300 ms entre ellos | solo reintenta `ExternalServiceException` (5xx, conexión rechazada, timeout); la consulta es un `GET`, idempotente |
+| Circuit Breaker | ventana de 10 llamadas, mínimo 5, abre con ≥ 50 % de fallos, 10 s en `OPEN`, 3 llamadas de prueba en `HALF_OPEN` | pasa solo de `OPEN` a `HALF_OPEN` tras la espera |
+| Cuenta como fallo | solo `ExternalServiceException` | un `404` (el usuario no existe) y un `4xx` de rechazo son respuestas de un servicio sano: ni abren el circuito ni se reintentan |
+
+- **Resultado explícito** (`UserLookupResult`): `Found | NotFound | Unavailable`. Ya no es un `Optional`, que mezclaba «no existe» con «no pude preguntar».
+- **Decisión de negocio:** si el dueño no se puede verificar (`Unavailable`), **`POST /tasks` acepta la tarea** (el JWT firmado ya prueba la identidad) y la marca con `ownerVerified: false` (columna nueva, migración `V2`). Rechazar todas las escrituras mientras auth esté caído sería peor para el usuario. Un fallback engañoso sería inventar un usuario. La tarea sigue sin verificar: no hay todavía un proceso que la verifique después (queda fuera de alcance).
+- **Orden de los aspectos:** Retry envuelve al Circuit Breaker. El *fallback* va en `@Retry` (el más externo); si estuviera en `@CircuitBreaker` se tragaría la excepción y no habría reintentos. Con el circuito abierto no se reintenta (`CallNotPermittedException` ignorada).
+- **Trampas conocidas:** las anotaciones solo funcionan si la llamada pasa por el proxy de Spring (otro bean llama al adaptador; un `this.método()` no); el fallback debe tener los mismos parámetros más un `Throwable`.
+- **Versiones:** el BOM de Spring Cloud fija los módulos `resilience4j-*` en 2.2.0; con `resilience4j-spring-boot3` 2.3.0 la app no arranca (`NoClassDefFoundError`). Se importa el `resilience4j-bom` 2.3.0 **antes** que el de Spring Cloud en `task-service/pom.xml`.
+- **Actuator** (`task-service`): `/actuator/health` es público; `/actuator/circuitbreakers` y `/actuator/circuitbreakerevents/authService` requieren `ADMIN`. El breaker **no** entra en `/actuator/health` (si lo hiciera, un auth caído marcaría task-service como no sano).
+- **Demo de lentitud** (`auth-service`, solo perfil `dev`): `POST /admin/dev/delay?ms=5000` (ADMIN) retrasa `GET /users/**`; `DELETE /admin/dev/delay` lo quita. No existe en test ni prod.
 
 ## Cómo se relacionan los dos servicios
 
@@ -150,7 +174,7 @@ Al **crear una tarea**, `task-service` pregunta a `auth-service` si el dueño (e
   caducidad con el mismo `JWT_SECRET` y construye el usuario **solo desde los claims**. No hay llamadas entre servicios.
 - **`tasks.owner_id` no tiene clave foránea.** `users` vive en otra base de datos y una restricción no cruza bases.
 - **La comprobación del dueño volvió en la clase 10** con una llamada HTTP (ver abajo).
-- **Con `auth-service` apagado**, `task-service` sigue validando tokens y atendiendo lecturas y cambios; solo **crear** tareas falla (503), porque comprueba el dueño (clase 10).
+- **Con `auth-service` apagado**, `task-service` sigue validando tokens y atendiendo todo; al crear una tarea no puede comprobar el dueño y la acepta como **no verificada** (clase 11).
 - Trade-off del secreto compartido: quien conoce `JWT_SECRET` puede *firmar* tokens, no solo validarlos. Con RSA (clave privada en auth, pública en task) solo `auth-service` firma; se comenta en clase.
 
 ## Arquitectura
@@ -160,4 +184,4 @@ en `task-service` además prohíbe cualquier dependencia de `com.taskhub.auth..`
 
 ## Pendiente a propósito (clases siguientes)
 
-Resiliencia (11), Docker (12), Compose y Jenkins (13), integración (14).
+Docker (12), Compose y Jenkins (13), integración (14).
