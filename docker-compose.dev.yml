@@ -1,0 +1,25 @@
+# Development database ONLY: one MySQL server with two schemas (auth_db, task_db), created by docker/mysql-init, published on the host.
+# Use it when you run the services from the IDE or with ./mvnw spring-boot:run:   docker compose -f docker-compose.dev.yml up -d
+# The whole system in containers is docker-compose.yml (class 13).
+# Variables are read from the .env file (see .env.example).
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: taskhub-mysql
+    environment:
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    ports:
+      - "${DB_PORT}:3306"
+    volumes:
+      - taskhub-mysqldata:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${DB_USER}", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  taskhub-mysqldata:
