@@ -1,24 +1,91 @@
-# Development database: ONE MySQL server with two schemas (auth_db, task_db), created by docker/mysql-init.
-# The services themselves run with ./mvnw spring-boot:run; the full Compose arrives in class 13.
-# Variables are read from the .env file (see .env.example).
+# TaskHub completo en contenedores:   docker compose up --build
+# Orden real de arranque (lo garantizan los healthchecks, no solo depends_on):
+#   mysql-auth, mysql-task, config-server  ->  auth-service, task-service  ->  api-gateway
+# Solo el gateway publica puerto al host (8080). Todo lo demás se habla por NOMBRE dentro de la red taskhub-net.
+# Variables: archivo .env (ver .env.example). Para trabajar desde el IDE con solo la base de datos: docker-compose.dev.yml.
+
+x-service-env: &service-env
+  SPRING_PROFILES_ACTIVE: docker                       # config-repo/*-docker.properties: URLs con nombres de servicio
+  CONFIG_SERVER_URL: http://config-server:8888
+  DB_USER: ${DB_USER:-taskhub}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required, see .env.example}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (min 32 characters), see .env.example}
+  JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xmx256m}    # 4 JVM + 2 MySQL: limita la memoria de cada JVM
+
+x-mysql: &mysql
+  image: mysql:8.4
+  networks: [taskhub-net]
+  healthcheck:
+    # depends_on solo espera a que el contenedor ARRANQUE; esto espera a que MySQL RESPONDA
+    test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: taskhub-mysql
+  mysql-auth:
+    <<: *mysql
     environment:
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-    ports:
-      - "${DB_PORT}:3306"
+      MYSQL_DATABASE: auth_db
+      MYSQL_USER: ${DB_USER:-taskhub}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required, see .env.example}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required, see .env.example}
     volumes:
-      - taskhub-mysqldata:/var/lib/mysql
-      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${DB_USER}", "-p${DB_PASSWORD}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - mysql-auth-data:/var/lib/mysql
+
+  mysql-task:
+    <<: *mysql
+    environment:
+      MYSQL_DATABASE: task_db
+      MYSQL_USER: ${DB_USER:-taskhub}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required, see .env.example}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required, see .env.example}
+    volumes:
+      - mysql-task-data:/var/lib/mysql
+
+  config-server:
+    build: ./config-server
+    image: taskhub/config-server:${IMAGE_TAG:-latest}
+    networks: [taskhub-net]
+    environment:
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xmx256m}
+    volumes:
+      - ./config-repo:/config-repo:ro                  # la configuración NO va dentro de la imagen
+
+  auth-service:
+    build: ./auth-service
+    image: taskhub/auth-service:${IMAGE_TAG:-latest}
+    networks: [taskhub-net]
+    environment: *service-env
+    depends_on:
+      mysql-auth: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+
+  task-service:
+    build: ./task-service
+    image: taskhub/task-service:${IMAGE_TAG:-latest}
+    networks: [taskhub-net]
+    environment: *service-env
+    depends_on:
+      mysql-task: { condition: service_healthy }
+      config-server: { condition: service_healthy }
+
+  api-gateway:
+    build: ./api-gateway
+    image: taskhub/api-gateway:${IMAGE_TAG:-latest}
+    networks: [taskhub-net]
+    environment: *service-env
+    ports:
+      - "8080:8080"                                    # el único puerto publicado
+    depends_on:
+      config-server: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+      task-service: { condition: service_healthy }
+
+networks:
+  taskhub-net:
+    name: taskhub-net
 
 volumes:
-  taskhub-mysqldata:
+  mysql-auth-data:
+  mysql-task-data:
