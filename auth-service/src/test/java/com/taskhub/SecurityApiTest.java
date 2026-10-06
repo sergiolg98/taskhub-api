@@ -1,8 +1,5 @@
 package com.taskhub;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.taskhub.auth.domain.model.Role;
-import com.taskhub.auth.infrastructure.security.JwtTokenIssuer;
 import com.taskhub.common.security.JwtAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,20 +21,17 @@ class SecurityApiTest {
     MockMvc mvc;
 
     @Autowired
-    JwtTokenIssuer issuer;
-
-    @Autowired
     ApplicationContext context;
 
     @Test
     void withoutTokenIs401() throws Exception {
-        mvc.perform(get("/tasks")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/users/2")).andExpect(status().isUnauthorized());
     }
 
     @Test
     void tamperedTokenIs401() throws Exception {
         String token = TestTokens.luis(mvc);
-        mvc.perform(get("/tasks").header("Authorization", token + "x"))
+        mvc.perform(get("/users/2").header("Authorization", token + "x"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -48,14 +42,6 @@ class SecurityApiTest {
         mvc.perform(get("/admin/users").header("Authorization", TestTokens.ana(mvc)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].password").doesNotExist());
-    }
-
-    @Test
-    void adminTasksAreOnlyForAdmins() throws Exception {
-        mvc.perform(get("/admin/tasks").header("Authorization", TestTokens.luis(mvc)))
-                .andExpect(status().isForbidden());
-        mvc.perform(get("/admin/tasks").header("Authorization", TestTokens.ana(mvc)))
-                .andExpect(status().isOk());
     }
 
     @Test
@@ -78,17 +64,6 @@ class SecurityApiTest {
                 .andExpect(status().isOk());
         mvc.perform(get("/users/999").header("Authorization", TestTokens.ana(mvc)))
                 .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void creatingATaskForAnOwnerThatNoLongerExistsIs404() throws Exception {
-        // Valid signature, but the user 999 does not exist: the task area asks the auth area through its port.
-        String ghost = "Bearer " + issuer.issue(999L, "ghost@taskhub.com", Role.USER);
-
-        mvc.perform(post("/tasks").header("Authorization", ghost)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"x\"}"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Owner not found: 999"));
     }
 
     @Test
@@ -131,7 +106,7 @@ class SecurityApiTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value("Not Found"));
-        mvc.perform(get("/tasks/abc").header("Authorization", luis))
+        mvc.perform(get("/users/abc").header("Authorization", luis))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid value for parameter 'id'"));
     }
@@ -155,20 +130,4 @@ class SecurityApiTest {
                 .andExpect(status().isOk());
     }
 
-    @Test
-    void otherUsersTaskIs404ButAdminCanSeeIt() throws Exception {
-        String luis = TestTokens.luis(mvc);
-        String location = mvc.perform(post("/tasks").header("Authorization", luis)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Privada\"}"))
-                .andReturn().getResponse().getHeader("Location");
-
-        mvc.perform(get(location).header("Authorization", TestTokens.ana(mvc))).andExpect(status().isOk());
-
-        String body = "{\"name\":\"Otro\",\"email\":\"otro@taskhub.com\",\"password\":\"Secret123\"}";
-        String other = mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andReturn().getResponse().getContentAsString();
-        String otherToken = "Bearer " + new ObjectMapper().readTree(other).get("token").asText();
-        mvc.perform(get(location).header("Authorization", otherToken)).andExpect(status().isNotFound());
-        mvc.perform(delete(location).header("Authorization", otherToken)).andExpect(status().isNotFound());
-    }
 }
