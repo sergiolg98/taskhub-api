@@ -1,4 +1,4 @@
-# TaskHub — snapshot `12-docker`
+# TaskHub — snapshot `13-jenkins`
 
 Proyecto guía del curso. Dos servicios independientes (`07-microservices`), cada uno con su proyecto Maven y su base de datos,
 cuya configuración vive en un **Config Server** (`08-config-server`) y que ahora se usan a través de un **API Gateway** (`09-api-gateway`):
@@ -18,11 +18,49 @@ Se hace así a propósito: compartir código entre servicios los acopla.
 - Java 21+
 - Docker (para MySQL)
 
-## Arrancar
+## Arrancar todo con Docker Compose (clase 13)
+
+```bash
+cp .env.example .env                  # una sola vez; cambia JWT_SECRET (mínimo 32 caracteres) y las contraseñas
+docker compose up --build -d --wait   # 6 contenedores; --wait espera a que todos estén healthy
+curl localhost:8080/actuator/health   # el gateway: {"status":"UP"}
+docker compose down -v                # para y borra los datos
+```
+
+Flujo de comprobación (solo el gateway publica puerto, `:8080`):
+
+```bash
+curl -X POST localhost:8080/auth/register -H 'Content-Type: application/json' -d '{"name":"Eva","email":"eva@taskhub.com","password":"Secret123"}'
+TOKEN=$(curl -s -X POST localhost:8080/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"luis@taskhub.com","password":"def456"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+curl -X POST localhost:8080/tasks -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" -d '{"title":"Preparar clase"}'
+```
+
+| Servicio de Compose | Imagen / origen | Espera a (`condition: service_healthy`) |
+|---|---|---|
+| `mysql-auth`, `mysql-task` | `mysql:8.4`, cada uno con su base | — |
+| `config-server` | `./config-server` (monta `config-repo` solo lectura) | — |
+| `auth-service` | `./auth-service` | `mysql-auth`, `config-server` |
+| `task-service` | `./task-service` | `mysql-task`, `config-server` |
+| `api-gateway` (publica `8080`) | `./api-gateway` | `config-server`, `auth-service`, `task-service` |
+
+- **Orden de arranque real:** lo garantizan los *healthchecks*, no `depends_on` a secas (que solo espera a que el contenedor *arranque*, no a que responda).
+  Trampa observada: el healthcheck de MySQL con `-h localhost` daba `healthy` durante la inicialización (la imagen levanta un servidor temporal sin red que sí responde por socket) y `auth-service` fallaba con *Communications link failure*. Se comprueba por TCP (`-h 127.0.0.1`).
+- **Perfil `docker`** de `config-repo` (`*-docker.properties`): URLs por nombre de servicio (`mysql-auth`, `auth-service`...), nunca `localhost`. Un test del config-server lo vigila.
+- **Secretos** solo por variables de entorno / `.env` (git ignora `.env`; `.env.example` lleva valores de muestra). Compose falla al arrancar si faltan `JWT_SECRET` o las contraseñas.
+- **Memoria:** `JAVA_TOOL_OPTIONS=-Xmx256m` por JVM. Con los 6 contenedores, el consumo observado fue ~2,3 GB.
+- **Imágenes** con etiqueta `taskhub/<servicio>:${IMAGE_TAG:-latest}`.
+
+## Jenkins (clase 13)
+
+El `Jenkinsfile` de la raíz define el pipeline **Checkout → Build → Test → Package → Docker Build**; cada stage recorre en paralelo los cuatro servicios.
+Para tener un Jenkins ya configurado (usuario y job por *Configuration as Code*): [`jenkins/README.md`](jenkins/README.md). **Montar el socket de Docker es un riesgo de seguridad** (equivale a ser root en la máquina); allí se explica.
+
+## Desarrollo desde el IDE o con Maven
 
 ```bash
 cp .env.example .env                  # una sola vez
-docker compose up -d                  # un MySQL con dos esquemas: auth_db y task_db
+docker compose -f docker-compose.dev.yml up -d   # SOLO la base de datos: un MySQL con dos esquemas (auth_db y task_db) en localhost:3306
 export JWT_SECRET='un-secreto-de-al-menos-32-caracteres-para-hs256'   # el MISMO para los dos servicios
 
 (cd config-server && ./mvnw spring-boot:run)   # terminal 1 → http://localhost:8888 (arrancar primero)
@@ -35,7 +73,7 @@ for s in config-server auth-service task-service api-gateway; do (cd $s && ./mvn
 El config-server lee `../config-repo`: arráncalo desde su carpeta o define `CONFIG_REPO_PATH`.
 
 > Si ya tenías el volumen de MySQL de las clases anteriores, el script que crea `auth_db` y `task_db` no se ejecuta
-> (solo corre con el volumen vacío). Haz `docker compose down -v && docker compose up -d` (borra los datos de desarrollo).
+> (solo corre con el volumen vacío). Haz `docker compose -f docker-compose.dev.yml down -v && docker compose -f docker-compose.dev.yml up -d` (borra los datos de desarrollo).
 
 `JWT_SECRET` es obligatorio en ambos servicios (falla rápido si falta). Es texto plano, mínimo 32 bytes (HS256).
 Flyway crea las tablas de cada servicio en su primer arranque; `auth-service` siembra dos usuarios (ver abajo).
@@ -212,4 +250,4 @@ en `task-service` además prohíbe cualquier dependencia de `com.taskhub.auth..`
 
 ## Pendiente a propósito (clases siguientes)
 
-Compose y Jenkins (13), integración (14).
+Integración y revisión final (14).
