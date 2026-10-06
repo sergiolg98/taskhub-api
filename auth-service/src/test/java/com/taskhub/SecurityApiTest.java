@@ -45,6 +45,12 @@ class SecurityApiTest {
     }
 
     @Test
+    void theDevDelayEndpointDoesNotExistOutsideTheDevProfile() throws Exception {
+        mvc.perform(post("/admin/dev/delay").param("ms", "100").header("Authorization", TestTokens.ana(mvc)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void userSummaryExposesOnlyIdNameAndRole() throws Exception {
         mvc.perform(get("/users/2").header("Authorization", TestTokens.luis(mvc)))
                 .andExpect(status().isOk())

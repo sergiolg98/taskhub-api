@@ -20,10 +20,20 @@
         <java.version>21</java.version>
         <!-- Spring Cloud release train compatible with Spring Boot 3.5.x (verified with a real build) -->
         <spring-cloud.version>2025.0.3</spring-cloud.version>
+        <resilience4j.version>2.3.0</resilience4j.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- FIRST on purpose: the Spring Cloud BOM pins the resilience4j-* modules to an older version (2.2.0), which breaks
+                 resilience4j-spring-boot3 2.3.0 at startup (NoClassDefFoundError: RxJava3FallbackDecorator). The first import wins. -->
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-bom</artifactId>
+                <version>${resilience4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
@@ -42,6 +52,19 @@
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <!-- Resilience4j chosen over spring-cloud-starter-circuitbreaker-resilience4j: annotations, properties and actuator out of the box -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

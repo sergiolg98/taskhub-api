@@ -43,11 +43,11 @@ public class TaskPersistenceAdapter implements TaskRepositoryPort {
 
     private TaskEntity toEntity(Task t) {
         return new TaskEntity(t.getId(), t.getTitle(), t.getDescription(), t.getStatus(),
-                t.getOwnerId(), t.getCreatedAt(), t.getUpdatedAt());
+                t.getOwnerId(), t.isOwnerVerified(), t.getCreatedAt(), t.getUpdatedAt());
     }
 
     private Task toDomain(TaskEntity e) {
         return new Task(e.getId(), e.getTitle(), e.getDescription(), e.getStatus(),
-                e.getOwnerId(), e.getCreatedAt(), e.getUpdatedAt());
+                e.getOwnerId(), e.isOwnerVerified(), e.getCreatedAt(), e.getUpdatedAt());
     }
 }

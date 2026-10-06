@@ -4,11 +4,14 @@ import com.taskhub.task.application.port.in.TaskUseCase;
 import com.taskhub.task.application.port.out.NotificationPort;
 import com.taskhub.task.application.port.out.TaskRepositoryPort;
 import com.taskhub.task.application.port.out.UserLookupPort;
+import com.taskhub.task.application.port.out.UserLookupResult;
 import com.taskhub.task.domain.exception.OwnerNotFoundException;
 import com.taskhub.task.domain.exception.TaskNotFoundException;
 import com.taskhub.task.domain.model.Requester;
 import com.taskhub.task.domain.model.Task;
 import com.taskhub.task.domain.model.TaskStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +20,8 @@ import java.util.List;
 @Service
 @Transactional
 public class TaskService implements TaskUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(TaskService.class);
 
     private final TaskRepositoryPort taskRepository;
     private final NotificationPort notifications;
@@ -31,8 +36,17 @@ public class TaskService implements TaskUseCase {
     @Override
     public Task create(String title, String description, Requester requester) {
         // The token proves who the user WAS when it was issued; this asks auth-service whether they still exist.
-        userLookup.findById(requester.userId()).orElseThrow(() -> new OwnerNotFoundException(requester.userId()));
-        Task created = taskRepository.save(Task.create(title, description, requester.userId()));
+        // Business decision: if auth-service cannot answer, the task is ACCEPTED (the signed token already proves the
+        // identity) and flagged ownerVerified=false. Rejecting every write while auth is down would be worse for the user.
+        boolean ownerVerified = switch (userLookup.findById(requester.userId())) {
+            case UserLookupResult.Found found -> true;
+            case UserLookupResult.NotFound notFound -> throw new OwnerNotFoundException(requester.userId());
+            case UserLookupResult.Unavailable unavailable -> {
+                log.warn("Owner {} not verified, accepting the task anyway: {}", requester.userId(), unavailable.reason());
+                yield false;
+            }
+        };
+        Task created = taskRepository.save(Task.create(title, description, requester.userId(), ownerVerified));
         notifications.notifyTaskCreated(created);
         return created;
     }

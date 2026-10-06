@@ -16,7 +16,7 @@ class ArchitectureTest {
     static final ArchRule domainDoesNotKnowFrameworksNorOtherLayers = noClasses()
             .that().resideInAPackage("..domain..")
             .should().dependOnClassesThat().resideInAnyPackage(
-                    "org.springframework..", "jakarta..", "io.jsonwebtoken..", "feign..",
+                    "org.springframework..", "jakarta..", "io.jsonwebtoken..", "feign..", "io.github.resilience4j..",
                     "..application..", "..infrastructure..");
 
     // @Service and @Transactional (spring.stereotype / spring.transaction) are allowed on purpose:
@@ -28,7 +28,7 @@ class ArchitectureTest {
                     "..infrastructure..", "org.springframework.data..", "org.springframework.web..",
                     "org.springframework.http..", "org.springframework.security..",
                     "jakarta.persistence..", "jakarta.servlet..", "io.jsonwebtoken..",
-                    "org.springframework.cloud..", "feign..");
+                    "org.springframework.cloud..", "feign..", "io.github.resilience4j..");
 
     @ArchTest
     static final ArchRule controllersTalkToPortsNotToPersistence = noClasses()
@@ -51,11 +51,12 @@ class ArchitectureTest {
     static final ArchRule nothingKnowsTheAuthService = noClasses()
             .should().dependOnClassesThat().resideInAPackage("com.taskhub.auth..");
 
-    // The HTTP client is an infrastructure detail: only the lookup adapter's package may know Feign.
+    // The HTTP client and its resilience are infrastructure details: only the lookup adapter's package may know them.
     @ArchTest
-    static final ArchRule onlyTheLookupPackageKnowsFeign = noClasses()
+    static final ArchRule onlyTheLookupPackageKnowsFeignAndResilience4j = noClasses()
             .that().resideOutsideOfPackage("com.taskhub.task.infrastructure.lookup..")
-            .should().dependOnClassesThat().resideInAnyPackage("feign..", "org.springframework.cloud.openfeign..");
+            .should().dependOnClassesThat().resideInAnyPackage("feign..", "org.springframework.cloud.openfeign..",
+                    "io.github.resilience4j..");
 
     @ArchTest
     static final ArchRule dependenciesAreInjectedByConstructor = NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
