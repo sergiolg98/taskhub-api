@@ -1,6 +1,8 @@
 package com.taskhub;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.taskhub.auth.domain.model.Role;
+import com.taskhub.auth.infrastructure.security.JwtTokenIssuer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -17,6 +19,9 @@ class SecurityApiTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JwtTokenIssuer issuer;
 
     @Test
     void withoutTokenIs401() throws Exception {
@@ -67,6 +72,17 @@ class SecurityApiTest {
                 .andExpect(status().isOk());
         mvc.perform(get("/users/999").header("Authorization", TestTokens.ana(mvc)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void creatingATaskForAnOwnerThatNoLongerExistsIs404() throws Exception {
+        // Valid signature, but the user 999 does not exist: the task area asks the auth area through its port.
+        String ghost = "Bearer " + issuer.issue(999L, "ghost@taskhub.com", Role.USER);
+
+        mvc.perform(post("/tasks").header("Authorization", ghost)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"x\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Owner not found: 999"));
     }
 
     @Test

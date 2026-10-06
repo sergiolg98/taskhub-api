@@ -3,6 +3,8 @@ package com.taskhub.task.application.service;
 import com.taskhub.task.application.port.in.TaskUseCase;
 import com.taskhub.task.application.port.out.NotificationPort;
 import com.taskhub.task.application.port.out.TaskRepositoryPort;
+import com.taskhub.task.application.port.out.UserLookupPort;
+import com.taskhub.task.domain.exception.OwnerNotFoundException;
 import com.taskhub.task.domain.exception.TaskNotFoundException;
 import com.taskhub.task.domain.model.Requester;
 import com.taskhub.task.domain.model.Task;
@@ -18,14 +20,17 @@ public class TaskService implements TaskUseCase {
 
     private final TaskRepositoryPort taskRepository;
     private final NotificationPort notifications;
+    private final UserLookupPort userLookup;
 
-    public TaskService(TaskRepositoryPort taskRepository, NotificationPort notifications) {
+    public TaskService(TaskRepositoryPort taskRepository, NotificationPort notifications, UserLookupPort userLookup) {
         this.taskRepository = taskRepository;
         this.notifications = notifications;
+        this.userLookup = userLookup;
     }
 
     @Override
     public Task create(String title, String description, Requester requester) {
+        userLookup.findById(requester.userId()).orElseThrow(() -> new OwnerNotFoundException(requester.userId()));
         Task created = taskRepository.save(Task.create(title, description, requester.userId()));
         notifications.notifyTaskCreated(created);
         return created;
