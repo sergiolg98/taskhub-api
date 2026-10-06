@@ -1,4 +1,4 @@
-# TaskHub — snapshot `09-api-gateway`
+# TaskHub — snapshot `10-service-communication`
 
 Proyecto guía del curso. Dos servicios independientes (`07-microservices`), cada uno con su proyecto Maven y su base de datos,
 cuya configuración vive en un **Config Server** (`08-config-server`) y que ahora se usan a través de un **API Gateway** (`09-api-gateway`):
@@ -128,13 +128,29 @@ Revocación de tokens: no se implementa (el token dura 5 minutos).
 
 Pregunta de clase: la regla «solo el dueño edita su tarea» vive en el servicio, no en el gateway (el gateway no conoce el dominio).
 
+## Comunicación entre servicios (clase 10)
+
+```text
+Cliente → api-gateway → task-service ──(OpenFeign, directo)──▶ auth-service  GET /users/{id}
+```
+
+Al **crear una tarea**, `task-service` pregunta a `auth-service` si el dueño (el `uid` del token) existe. Se eligió la validación del dueño (no enriquecer el detalle de la tarea).
+
+- **Hexagonal intacta:** el puerto `UserLookupPort` y los casos de uso son los de la clase 4; solo cambia el adaptador (`UserLookupLocalAdapter` → `UserLookupFeignAdapter`). El `@FeignClient` (`AuthClient`) vive en `task.infrastructure.lookup`, y ArchUnit impide que cualquier otro paquete conozca Feign.
+- **Contrato:** `GET /users/{id}` → `{id, name, role}` (nunca email ni contraseña). Lo **posee** `auth-service`; `task-service` mantiene su propia copia (`UserSummaryResponse`, `UserSummary`). Cero clases compartidas.
+- **La llamada va directa a `auth-service`** (`taskhub.auth-service.url` en `config-repo`), no por el gateway: es tráfico interno.
+- **Errores** (`AuthClientConfig`): `404` → el usuario no existe (`OwnerNotFoundException`, 404 al cliente); cualquier otro fallo (500, conexión rechazada, timeout, conexión cortada) → `ExternalServiceException` → **503** «User verification is temporarily unavailable» y no se guarda nada. «No existe» y «no puedo saberlo» son cosas distintas. No se lee el cuerpo del error (puede no ser JSON).
+- **Propagación:** un `RequestInterceptor` reenvía `Authorization` (la llamada es en nombre del usuario; `auth-service` solo deja consultarse a uno mismo o a un ADMIN, y el dueño siempre es el propio solicitante) y `X-Request-Id`. La alternativa, credenciales de servicio, no se implementa.
+- **Timeouts** (`config-repo/task-service.properties`): `connect-timeout=2000`, `read-timeout=3000`. Sin reintentos (Feign usa `NEVER_RETRY`): la resiliencia es la clase 11.
+- **Contrato y versionado:** si `auth-service` cambia el JSON, `task-service` lo descubre en ejecución. Añadir campos es compatible (se ignoran); quitarlos o renombrarlos no.
+
 ## Cómo se relacionan los dos servicios
 
 - **El token es el único contrato.** `auth-service` lo firma (HS256) con claims `sub`, `uid` y `role`; `task-service` solo comprueba la firma y la
   caducidad con el mismo `JWT_SECRET` y construye el usuario **solo desde los claims**. No hay llamadas entre servicios.
 - **`tasks.owner_id` no tiene clave foránea.** `users` vive en otra base de datos y una restricción no cruza bases.
-- **Pérdida consciente:** `task-service` ya no comprueba que el dueño exista (antes: `OwnerNotFoundException`, 404). Vuelve en la clase 10 con una llamada HTTP.
-- **`task-service` sigue funcionando con `auth-service` apagado** para los tokens ya emitidos (verificado).
+- **La comprobación del dueño volvió en la clase 10** con una llamada HTTP (ver abajo).
+- **Con `auth-service` apagado**, `task-service` sigue validando tokens y atendiendo lecturas y cambios; solo **crear** tareas falla (503), porque comprueba el dueño (clase 10).
 - Trade-off del secreto compartido: quien conoce `JWT_SECRET` puede *firmar* tokens, no solo validarlos. Con RSA (clave privada en auth, pública en task) solo `auth-service` firma; se comenta en clase.
 
 ## Arquitectura
@@ -144,4 +160,4 @@ en `task-service` además prohíbe cualquier dependencia de `com.taskhub.auth..`
 
 ## Pendiente a propósito (clases siguientes)
 
-comunicación entre servicios (10), resiliencia (11), Docker (12), Compose y Jenkins (13), integración (14).
+Resiliencia (11), Docker (12), Compose y Jenkins (13), integración (14).
