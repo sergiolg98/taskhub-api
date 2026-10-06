@@ -1,8 +1,8 @@
-# TaskHub — snapshot `04-expert-final`
+# TaskHub — snapshot `05-expert-final-reviewed`
 
 Proyecto guía del curso: monolito Spring Boot con arquitectura hexagonal, JPA y MySQL.
-Cierre del módulo Experto: el monolito queda **preparado para dividirse**. Dos áreas de negocio (`auth`, `task`) con sus fronteras
-verificadas por tests, un contrato explícito entre ellas (`UserSummary`) y un token que basta para identificar al usuario sin consultar la base.
+Mismo diseño que `04-expert-final`, tras un **code review** que corrigió 6 defectos reales (identidad por email, filtro JWT duplicado,
+límite de BCrypt en bytes, formato de error único, `IllegalArgumentException` como 400, carrera en el registro).
 
 ## Requisitos
 
@@ -55,7 +55,8 @@ curl localhost:8080/tasks -H "Authorization: Bearer $TOKEN"
 ```
 
 Códigos: `401` sin token, token inválido o credenciales erróneas · `403` rol insuficiente · `404` recurso inexistente
-**o ajeno** (no se confirma que exista) · `409` email ya registrado · `400` validación.
+**o ajeno** (no se confirma que exista) · `409` email ya registrado · `400` validación · `405`/`415`/`500` genéricos.
+Todos los errores usan el mismo formato `ErrorResponse` (`status`, `message`, `details`, `timestamp`).
 
 ## Arquitectura
 
@@ -85,7 +86,7 @@ Reglas (las comprueba `ArchitectureTest` en cada `mvn test`):
 
 ## Pruebas
 
-`./mvnw test` (36 tests, usan H2): unitarias de casos de uso con puertos simulados, `JwtParserTest`, `NotificationStrategyFactoryTest`,
+`./mvnw test` (48 tests, usan H2): unitarias de casos de uso con puertos simulados, `JwtParserTest`, `NotificationStrategyFactoryTest`,
 `ArchitectureTest` y las de API (`TaskApiTest`, `SecurityApiTest`) que prueban el comportamiento completo.
 
 ## Pendiente a propósito (clases siguientes)
