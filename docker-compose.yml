@@ -16,8 +16,10 @@ x-mysql: &mysql
   image: mysql:8.4
   networks: [taskhub-net]
   healthcheck:
-    # depends_on solo espera a que el contenedor ARRANQUE; esto espera a que MySQL RESPONDA
-    test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+    # depends_on solo espera a que el contenedor ARRANQUE; esto espera a que MySQL RESPONDA.
+    # 127.0.0.1 (TCP) y no "localhost" (socket): en el primer arranque la imagen levanta un servidor temporal SIN red
+    # que sí responde por socket, y con "localhost" el healthcheck daba "healthy" antes de tiempo (observado).
+    test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
     interval: 5s
     timeout: 5s
     retries: 20
