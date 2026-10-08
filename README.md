@@ -1,12 +1,13 @@
-# TaskHub — snapshot `08-config-server`
+# TaskHub — snapshot `09-api-gateway`
 
 Proyecto guía del curso. Dos servicios independientes (`07-microservices`), cada uno con su proyecto Maven y su base de datos,
-cuya configuración ahora vive en un **Config Server** (`08-config-server`):
+cuya configuración vive en un **Config Server** (`08-config-server`) y que ahora se usan a través de un **API Gateway** (`09-api-gateway`):
 
 | Servicio | Puerto | Base de datos | Responsabilidad |
 |---|---|---|---|
 | [`auth-service`](auth-service/) | 8081 | `auth_db` | registro, login, emisión del JWT, usuarios |
 | [`task-service`](task-service/) | 8082 | `task_db` | tareas, regla de propiedad, endpoints de admin |
+| [`api-gateway`](api-gateway/) | 8080 | — | punto único de entrada: enruta a los dos servicios |
 | [`config-server`](config-server/) | 8888 | — | sirve la configuración de los dos servicios desde [`config-repo/`](config-repo/) |
 
 No hay `pom.xml` padre ni clases compartidas: cada servicio lleva su **propia copia** de `common` (validación del token, formato de error).
@@ -27,7 +28,8 @@ export JWT_SECRET='un-secreto-de-al-menos-32-caracteres-para-hs256'   # el MISMO
 (cd config-server && ./mvnw spring-boot:run)   # terminal 1 → http://localhost:8888 (arrancar primero)
 (cd auth-service && ./mvnw spring-boot:run)    # terminal 2 → http://localhost:8081
 (cd task-service && ./mvnw spring-boot:run)    # terminal 3 → http://localhost:8082
-(cd config-server && ./mvnw test); (cd auth-service && ./mvnw test); (cd task-service && ./mvnw test)   # sin Docker
+(cd api-gateway && ./mvnw spring-boot:run)     # terminal 4 → http://localhost:8080 (la única URL que usa el cliente)
+for s in config-server auth-service task-service api-gateway; do (cd $s && ./mvnw test); done   # sin Docker
 ```
 
 El config-server lee `../config-repo`: arráncalo desde su carpeta o define `CONFIG_REPO_PATH`.
@@ -68,13 +70,15 @@ Flyway crea las tablas de cada servicio en su primer arranque; `auth-service` si
 | DELETE | `/tasks/{id}` | dueño o `ADMIN` | Eliminar |
 | GET | `/admin/tasks` | `ADMIN` | Todas las tareas |
 
+Desde la clase 9 el cliente solo habla con el gateway (`:8080`); los puertos 8081 y 8082 siguen abiertos en local, pero conceptualmente son internos.
+
 ```bash
-TOKEN=$(curl -s -X POST localhost:8081/auth/login -H 'Content-Type: application/json' \
+TOKEN=$(curl -s -X POST localhost:8080/auth/login -H 'Content-Type: application/json' \
   -d '{"email":"luis@taskhub.com","password":"def456"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 
-curl -X POST localhost:8082/tasks -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
-  -d '{"title":"Preparar clase"}'                       # el token se emite en 8081 y se usa en 8082
-curl localhost:8082/tasks -H "Authorization: Bearer $TOKEN"
+curl -X POST localhost:8080/tasks -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
+  -d '{"title":"Preparar clase"}'                       # el gateway enruta a task-service
+curl localhost:8080/tasks -H "Authorization: Bearer $TOKEN"
 ```
 
 Los códigos de error son los de siempre (`401`, `403`, `404`, `409`, `400`) y todos usan el mismo formato `ErrorResponse`.
@@ -98,6 +102,32 @@ config-repo/ (archivos)  →  config-server :8888  →  auth-service / task-serv
 - Para probar el server: `curl localhost:8888/task-service/dev` y `curl localhost:8888/auth-service/prod`.
 - Cambiar un valor (p. ej. `server.port` en `config-repo/task-service.properties`) y **reiniciar** el cliente basta; no se recompila. Sin recarga en caliente (`/actuator/refresh` queda como lectura opcional).
 
+## API Gateway (clase 9)
+
+```text
+Cliente → api-gateway :8080 → auth-service :8081 | task-service :8082
+```
+
+Spring Cloud Gateway (reactivo, WebFlux: **nunca** `spring-boot-starter-web` en este proyecto). Sus rutas, CORS y timeouts están en `config-repo/api-gateway*.properties`.
+
+| Ruta en `:8080` | Destino |
+|---|---|
+| `/auth/**`, `/users/**`, `/admin/users/**` | `auth-service` |
+| `/tasks/**`, `/admin/tasks/**` | `task-service` |
+
+Las rutas no se reescriben (sin `StripPrefix`): los servicios exponen los mismos paths que el gateway.
+
+**Qué valida el gateway** (y solo esto):
+- Fuera de `/auth/**` exige `Authorization: Bearer <algo>`; si falta responde `401` sin llegar al servicio. **No** lee ni confía en el token.
+- Añade `X-Request-Id` (reutiliza el del cliente si es inocuo; si no, genera un UUID) hacia el servicio y de vuelta al cliente, y registra una línea por petición.
+- Responde el CORS (único sitio donde se configura) y devuelve el formato `ErrorResponse` también cuando falla él mismo: `503` servicio caído, `504` timeout, `404` ruta inexistente.
+
+**Qué valida cada servicio:** firma y caducidad del JWT, roles (`/admin/**`) y propiedad de los recursos. Es el **modelo A** (el gateway enruta, el servicio valida): defense in depth, y un servicio
+sigue protegido aunque alguien lo llame sin pasar por el gateway. El coste: el JWT se valida en cada servicio. En el modelo B (el gateway valida y los servicios confían) hay un solo punto de validación, pero cualquier acceso directo a un servicio queda sin proteger.
+Revocación de tokens: no se implementa (el token dura 5 minutos).
+
+Pregunta de clase: la regla «solo el dueño edita su tarea» vive en el servicio, no en el gateway (el gateway no conoce el dominio).
+
 ## Cómo se relacionan los dos servicios
 
 - **El token es el único contrato.** `auth-service` lo firma (HS256) con claims `sub`, `uid` y `role`; `task-service` solo comprueba la firma y la
@@ -114,4 +144,4 @@ en `task-service` además prohíbe cualquier dependencia de `com.taskhub.auth..`
 
 ## Pendiente a propósito (clases siguientes)
 
-API Gateway (09), comunicación entre servicios (10), resiliencia (11), Docker (12), Compose y Jenkins (13), integración (14).
+comunicación entre servicios (10), resiliencia (11), Docker (12), Compose y Jenkins (13), integración (14).

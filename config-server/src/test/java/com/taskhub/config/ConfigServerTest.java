@@ -47,6 +47,16 @@ class ConfigServerTest {
     }
 
     @Test
+    void gatewayRoutesPointToTheServicesOfTheProfile() throws Exception {
+        mvc.perform(get("/api-gateway/dev"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.propertySources[0].source['taskhub.auth-service.url']").value("http://localhost:8081"));
+        mvc.perform(get("/api-gateway/prod"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.propertySources[0].source['taskhub.task-service.url']").value("http://task-service:8082"));
+    }
+
+    @Test
     void theConfigRepoHoldsNoSecrets() throws IOException {
         List<String> offenders;
         try (Stream<Path> files = Files.list(Path.of("../config-repo"))) {
