@@ -1,7 +1,7 @@
-# TaskHub — snapshot `02-patterns`
+# TaskHub — snapshot `03-microservices-design`
 
 Proyecto guía del curso: monolito Spring Boot con arquitectura hexagonal, JPA y MySQL.
-Mismo comportamiento y endpoints que `01-jwt-security`, con el diseño interno refinado: registro/login en la capa de aplicación, **Strategy + Factory** de notificaciones y reglas de arquitectura ejecutables (**ArchUnit**).
+Mismo código que `02-patterns`: **esta clase solo añade documentación** de diseño. El monolito sigue corriendo. Heredado de `02-patterns` (diseño interno refinado): registro/login en la capa de aplicación, **Strategy + Factory** de notificaciones y reglas de arquitectura ejecutables (**ArchUnit**).
 
 ## Requisitos
 
