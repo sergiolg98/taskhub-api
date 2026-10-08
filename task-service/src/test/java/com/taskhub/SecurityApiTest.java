@@ -1,6 +1,15 @@
 package com.taskhub;
 
 import com.taskhub.common.security.JwtAuthenticationFilter;
+import com.taskhub.task.application.port.out.UserLookupPort;
+import com.taskhub.task.domain.model.UserSummary;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -19,6 +28,15 @@ class SecurityApiTest {
 
     @Autowired
     MockMvc mvc;
+
+    @MockitoBean
+    UserLookupPort userLookup;
+
+    @BeforeEach
+    void ownersExist() {
+        when(userLookup.findById(anyLong())).thenAnswer(inv ->
+                Optional.of(new UserSummary(inv.getArgument(0), "Someone", "USER")));
+    }
 
     @Autowired
     ApplicationContext context;
@@ -42,15 +60,15 @@ class SecurityApiTest {
                 .andExpect(status().isOk());
     }
 
-    // auth-service is not involved: a valid signature is enough. Verifying that the owner still exists comes in class 10.
     @Test
-    void aTokenOfAUserThisServiceHasNeverSeenCreatesTasks() throws Exception {
+    void anOwnerThatNoLongerExistsIs404() throws Exception {
+        when(userLookup.findById(999L)).thenReturn(Optional.empty());
         String ghost = TestTokens.token(999L, "ghost@taskhub.com", "USER");
 
         mvc.perform(post("/tasks").header("Authorization", ghost)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"x\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.ownerId").value(999));
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Owner not found: 999"));
     }
 
     @Test

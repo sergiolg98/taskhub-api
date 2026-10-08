@@ -16,7 +16,7 @@ class ArchitectureTest {
     static final ArchRule domainDoesNotKnowFrameworksNorOtherLayers = noClasses()
             .that().resideInAPackage("..domain..")
             .should().dependOnClassesThat().resideInAnyPackage(
-                    "org.springframework..", "jakarta..", "io.jsonwebtoken..",
+                    "org.springframework..", "jakarta..", "io.jsonwebtoken..", "feign..",
                     "..application..", "..infrastructure..");
 
     // @Service and @Transactional (spring.stereotype / spring.transaction) are allowed on purpose:
@@ -27,7 +27,8 @@ class ArchitectureTest {
             .should().dependOnClassesThat().resideInAnyPackage(
                     "..infrastructure..", "org.springframework.data..", "org.springframework.web..",
                     "org.springframework.http..", "org.springframework.security..",
-                    "jakarta.persistence..", "jakarta.servlet..", "io.jsonwebtoken..");
+                    "jakarta.persistence..", "jakarta.servlet..", "io.jsonwebtoken..",
+                    "org.springframework.cloud..", "feign..");
 
     @ArchTest
     static final ArchRule controllersTalkToPortsNotToPersistence = noClasses()
@@ -49,6 +50,12 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule nothingKnowsTheAuthService = noClasses()
             .should().dependOnClassesThat().resideInAPackage("com.taskhub.auth..");
+
+    // The HTTP client is an infrastructure detail: only the lookup adapter's package may know Feign.
+    @ArchTest
+    static final ArchRule onlyTheLookupPackageKnowsFeign = noClasses()
+            .that().resideOutsideOfPackage("com.taskhub.task.infrastructure.lookup..")
+            .should().dependOnClassesThat().resideInAnyPackage("feign..", "org.springframework.cloud.openfeign..");
 
     @ArchTest
     static final ArchRule dependenciesAreInjectedByConstructor = NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
