@@ -1,4 +1,4 @@
-# TaskHub — snapshot `11-resilience`
+# TaskHub — snapshot `12-docker`
 
 Proyecto guía del curso. Dos servicios independientes (`07-microservices`), cada uno con su proyecto Maven y su base de datos,
 cuya configuración vive en un **Config Server** (`08-config-server`) y que ahora se usan a través de un **API Gateway** (`09-api-gateway`):
@@ -144,6 +144,34 @@ Al **crear una tarea**, `task-service` pregunta a `auth-service` si el dueño (e
 - **Timeouts** (`config-repo/task-service.properties`): `connect-timeout=1000`, `read-timeout=2000`. Feign no reintenta por sí mismo (`NEVER_RETRY`); los reintentos los pone Resilience4j (clase 11).
 - **Contrato y versionado:** si `auth-service` cambia el JSON, `task-service` lo descubre en ejecución. Añadir campos es compatible (se ignoran); quitarlos o renombrarlos no.
 
+## Docker (clase 12)
+
+Cada servicio tiene su `Dockerfile` y su `.dockerignore`. Construir desde la carpeta del servicio:
+
+```bash
+cd auth-service && docker build -t taskhub/auth-service .      # idem config-server, api-gateway, task-service
+```
+
+La primera construcción tarda unos minutos (descarga las dependencias de Maven); las siguientes aprovechan la caché.
+
+- **Multi-stage:** la etapa `build` (Maven + JDK) compila el JAR; la etapa final solo lleva el JRE y la aplicación. No hay Maven ni código fuente en la imagen.
+- **Capas de Spring Boot** (`-Djarmode=tools extract --layers`): dependencias, loader y aplicación en capas separadas. Con un cambio de una línea de código solo se reconstruye la capa de la aplicación (comprobado).
+- **Usuario no root** (`app`, uid 10001) y `-XX:MaxRAMPercentage=75`.
+- **`HEALTHCHECK`** contra `/actuator/health` (el puerto está escrito en cada Dockerfile). `eclipse-temurin:21-jre` trae `curl`; en la variante `-alpine` habría que usar `wget`.
+- **Los tests no se ejecutan al construir la imagen** (`-DskipTests`): tienen su propia etapa en el pipeline (clase 13).
+- **Sin configuración ni secretos dentro de la imagen:** todo llega por variables de entorno (`SPRING_PROFILES_ACTIVE`, `CONFIG_SERVER_URL`, `JWT_SECRET`, `DB_USER`, `DB_PASSWORD`, `JAVA_TOOL_OPTIONS`). El `config-repo` se **monta** en `config-server` (`-v ./config-repo:/config-repo:ro`).
+- **`localhost` dentro de un contenedor es el propio contenedor:** sin `CONFIG_SERVER_URL` el servicio busca el config-server en `localhost:8888` y no lo encuentra. En una red de Docker los servicios se llaman por el **nombre del contenedor**, y el perfil `prod` de `config-repo` ya usa esos nombres (`mysql-auth`, `mysql-task`, `auth-service`, `task-service`).
+
+Ejemplo manual (la clase 13 lo automatiza con Compose); solo el gateway publica puerto:
+
+```bash
+docker network create taskhub-net
+docker run -d --name mysql-auth --network taskhub-net -e MYSQL_DATABASE=auth_db -e MYSQL_USER=taskhub -e MYSQL_PASSWORD=taskhub -e MYSQL_ROOT_PASSWORD=root mysql:8.4
+docker run -d --name config-server --network taskhub-net -v "$PWD/config-repo:/config-repo:ro" taskhub/config-server
+docker run -d --name auth-service --network taskhub-net -e SPRING_PROFILES_ACTIVE=prod -e CONFIG_SERVER_URL=http://config-server:8888 \
+  -e JWT_SECRET='un-secreto-de-al-menos-32-caracteres-para-hs256' -e DB_USER=taskhub -e DB_PASSWORD=taskhub taskhub/auth-service
+```
+
 ## Resiliencia (clase 11)
 
 ```text
@@ -184,4 +212,4 @@ en `task-service` además prohíbe cualquier dependencia de `com.taskhub.auth..`
 
 ## Pendiente a propósito (clases siguientes)
 
-Docker (12), Compose y Jenkins (13), integración (14).
+Compose y Jenkins (13), integración (14).

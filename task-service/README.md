@@ -11,3 +11,5 @@ export JWT_SECRET='un-secreto-de-al-menos-32-caracteres-para-hs256'   # el mismo
 Al crear una tarea pregunta a `auth-service` (OpenFeign, `GET /users/{id}`) si el dueño existe, con timeout, reintento, circuit breaker y fallback (Resilience4j); si no puede verificarlo acepta la tarea con `ownerVerified=false`. Necesita `taskhub.auth-service.url`.
 Solo **valida** tokens (`JwtParser`): no tiene tabla de usuarios, ni login, ni BCrypt. El dueño de una tarea sale del claim `uid`.
 Variables: `JWT_SECRET` (obligatoria), `DB_URL`, `DB_USER`, `DB_PASSWORD`. Ver el [README raíz](../README.md).
+
+Imagen: `docker build -t taskhub/task-service .` (puerto 8082, usuario no root, `HEALTHCHECK` en `/actuator/health`). Ver el [README raíz](../README.md#docker-clase-12).
