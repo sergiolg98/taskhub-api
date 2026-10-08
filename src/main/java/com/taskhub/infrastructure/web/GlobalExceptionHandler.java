@@ -1,13 +1,13 @@
 package com.taskhub.infrastructure.web;
 
 import com.taskhub.domain.exception.EmailAlreadyUsedException;
+import com.taskhub.domain.exception.InvalidCredentialsException;
 import com.taskhub.domain.exception.TaskNotFoundException;
 import com.taskhub.domain.exception.UserNotFoundException;
 import com.taskhub.infrastructure.web.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -27,9 +27,9 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), List.of());
     }
 
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
-        return build(HttpStatus.UNAUTHORIZED, "Invalid credentials", List.of());
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
