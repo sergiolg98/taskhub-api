@@ -3,13 +3,16 @@ package com.taskhub;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.taskhub.auth.domain.model.Role;
 import com.taskhub.auth.infrastructure.security.JwtTokenIssuer;
+import com.taskhub.common.security.JwtAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -22,6 +25,9 @@ class SecurityApiTest {
 
     @Autowired
     JwtTokenIssuer issuer;
+
+    @Autowired
+    ApplicationContext context;
 
     @Test
     void withoutTokenIs401() throws Exception {
@@ -95,6 +101,58 @@ class SecurityApiTest {
         mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"eva@taskhub.com\",\"password\":\"wrong\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void passwordSizeIsMeasuredInBytesBecauseBcryptStopsAt72() throws Exception {
+        String tooLong = "ñ".repeat(40);   // 40 characters but 80 bytes
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8")
+                        .content("{\"name\":\"Bytes\",\"email\":\"bytes@taskhub.com\",\"password\":\"" + tooLong + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]").value("password: must not exceed 72 bytes in UTF-8"));
+
+        String fits = "ñ".repeat(36);      // exactly 72 bytes
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8")
+                        .content("{\"name\":\"Bytes\",\"email\":\"bytes@taskhub.com\",\"password\":\"" + fits + "\"}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void errorsGeneratedBySpringUseTheSameFormat() throws Exception {
+        String luis = TestTokens.luis(mvc);
+        mvc.perform(put("/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405))
+                .andExpect(jsonPath("$.message").value("Method Not Allowed"));
+        mvc.perform(post("/auth/login").contentType(MediaType.TEXT_PLAIN).content("x"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.message").value("Unsupported Media Type"));
+        mvc.perform(get("/nope").header("Authorization", luis))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Not Found"));
+        mvc.perform(get("/tasks/abc").header("Authorization", luis))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'id'"));
+    }
+
+    @Test
+    void jwtFilterLivesOnlyInsideTheSecurityChain() {
+        // A Filter bean is also registered by Spring Boot as a servlet filter, so it would run twice.
+        assertThat(context.getBeanNamesForType(JwtAuthenticationFilter.class)).isEmpty();
+    }
+
+    @Test
+    void sameEmailWithDifferentCaseIsTheSameAccount() throws Exception {
+        String body = "{\"name\":\"Mixed\",\"email\":\"Mixed@TaskHub.com\",\"password\":\"Secret123\"}";
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(body.replace("Mixed@TaskHub.com", "MIXED@TASKHUB.COM")))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"MIXED@taskhub.com\",\"password\":\"Secret123\"}"))
+                .andExpect(status().isOk());
     }
 
     @Test

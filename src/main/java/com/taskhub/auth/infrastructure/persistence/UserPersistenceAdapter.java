@@ -1,7 +1,9 @@
 package com.taskhub.auth.infrastructure.persistence;
 
 import com.taskhub.auth.application.port.out.UserRepositoryPort;
+import com.taskhub.auth.domain.exception.EmailAlreadyUsedException;
 import com.taskhub.auth.domain.model.User;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -33,7 +35,12 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
 
     @Override
     public User save(User user) {
-        return toDomain(this.repository.save(toEntity(user)));
+        try {
+            return toDomain(this.repository.save(toEntity(user)));
+        } catch (DataIntegrityViolationException e) {
+            // The UNIQUE constraint is the real guarantee: two simultaneous registrations can both pass existsByEmail.
+            throw new EmailAlreadyUsedException(user.getEmail());
+        }
     }
 
     @Override

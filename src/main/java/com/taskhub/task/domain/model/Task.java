@@ -1,5 +1,7 @@
 package com.taskhub.task.domain.model;
 
+import com.taskhub.task.domain.exception.InvalidTaskException;
+
 import java.time.LocalDateTime;
 
 public class Task {
@@ -15,7 +17,7 @@ public class Task {
     public Task(Long id, String title, String description, TaskStatus status, Long ownerId,
                 LocalDateTime createdAt, LocalDateTime updatedAt) {
         if (title == null || title.isBlank()) {
-            throw new IllegalArgumentException("Task title must not be blank");
+            throw new InvalidTaskException("Task title must not be blank");
         }
         this.id = id;
         this.title = title;
@@ -33,7 +35,7 @@ public class Task {
 
     public void update(String title, String description) {
         if (title == null || title.isBlank()) {
-            throw new IllegalArgumentException("Task title must not be blank");
+            throw new InvalidTaskException("Task title must not be blank");
         }
         this.title = title;
         this.description = description;
