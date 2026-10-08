@@ -25,6 +25,9 @@ public class TaskEntity {
     @Column(name = "owner_id", nullable = false)
     private Long ownerId;
 
+    @Column(name = "owner_verified", nullable = false)
+    private boolean ownerVerified;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -35,12 +38,13 @@ public class TaskEntity {
     }
 
     public TaskEntity(Long id, String title, String description, TaskStatus status, Long ownerId,
-                      LocalDateTime createdAt, LocalDateTime updatedAt) {
+                      boolean ownerVerified, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.title = title;
         this.description = description;
         this.status = status;
         this.ownerId = ownerId;
+        this.ownerVerified = ownerVerified;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -50,6 +54,7 @@ public class TaskEntity {
     public String getDescription() { return description; }
     public TaskStatus getStatus() { return status; }
     public Long getOwnerId() { return ownerId; }
+    public boolean isOwnerVerified() { return ownerVerified; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

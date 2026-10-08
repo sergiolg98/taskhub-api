@@ -2,11 +2,10 @@ package com.taskhub;
 
 import com.taskhub.common.security.JwtAuthenticationFilter;
 import com.taskhub.task.application.port.out.UserLookupPort;
+import com.taskhub.task.application.port.out.UserLookupResult;
 import com.taskhub.task.domain.model.UserSummary;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-
-import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -35,7 +34,7 @@ class SecurityApiTest {
     @BeforeEach
     void ownersExist() {
         when(userLookup.findById(anyLong())).thenAnswer(inv ->
-                Optional.of(new UserSummary(inv.getArgument(0), "Someone", "USER")));
+                new UserLookupResult.Found(new UserSummary(inv.getArgument(0), "Someone", "USER")));
     }
 
     @Autowired
@@ -61,8 +60,19 @@ class SecurityApiTest {
     }
 
     @Test
+    void actuatorHealthIsPublicButTheRestIsOnlyForAdmins() throws Exception {
+        mvc.perform(get("/actuator/health")).andExpect(status().isOk());
+        mvc.perform(get("/actuator/circuitbreakers")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/circuitbreakers").header("Authorization", TestTokens.luis()))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/actuator/circuitbreakers").header("Authorization", TestTokens.ana()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.circuitBreakers.authService.state").value("CLOSED"));
+    }
+
+    @Test
     void anOwnerThatNoLongerExistsIs404() throws Exception {
-        when(userLookup.findById(999L)).thenReturn(Optional.empty());
+        when(userLookup.findById(999L)).thenReturn(new UserLookupResult.NotFound());
         String ghost = TestTokens.token(999L, "ghost@taskhub.com", "USER");
 
         mvc.perform(post("/tasks").header("Authorization", ghost)

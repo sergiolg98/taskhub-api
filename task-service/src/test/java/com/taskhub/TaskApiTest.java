@@ -1,11 +1,10 @@
 package com.taskhub;
 
 import com.taskhub.task.application.port.out.UserLookupPort;
+import com.taskhub.task.application.port.out.UserLookupResult;
 import com.taskhub.task.domain.model.UserSummary;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-
-import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -33,7 +32,7 @@ class TaskApiTest {
     @BeforeEach
     void ownersExist() {
         when(userLookup.findById(anyLong())).thenAnswer(inv ->
-                Optional.of(new UserSummary(inv.getArgument(0), "Someone", "USER")));
+                new UserLookupResult.Found(new UserSummary(inv.getArgument(0), "Someone", "USER")));
     }
 
     @Test

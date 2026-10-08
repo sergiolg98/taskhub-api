@@ -11,11 +11,12 @@ public record TaskResponse(
         String description,
         TaskStatus status,
         Long ownerId,
+        boolean ownerVerified,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
 
     public static TaskResponse from(Task t) {
         return new TaskResponse(t.getId(), t.getTitle(), t.getDescription(), t.getStatus(),
-                t.getOwnerId(), t.getCreatedAt(), t.getUpdatedAt());
+                t.getOwnerId(), t.isOwnerVerified(), t.getCreatedAt(), t.getUpdatedAt());
     }
 }

@@ -3,7 +3,7 @@ package com.taskhub.task.application;
 import com.taskhub.task.application.port.out.NotificationPort;
 import com.taskhub.task.application.port.out.TaskRepositoryPort;
 import com.taskhub.task.application.port.out.UserLookupPort;
-import com.taskhub.task.domain.exception.ExternalServiceException;
+import com.taskhub.task.application.port.out.UserLookupResult;
 import com.taskhub.task.domain.exception.OwnerNotFoundException;
 import com.taskhub.task.application.service.TaskService;
 import com.taskhub.task.domain.exception.TaskNotFoundException;
@@ -39,7 +39,7 @@ class TaskServiceTest {
 
     @Test
     void createStoresTheTaskForTheRequesterAndNotifies() {
-        when(userLookup.findById(2L)).thenReturn(Optional.of(new UserSummary(2L, "Luis User", "USER")));
+        when(userLookup.findById(2L)).thenReturn(new UserLookupResult.Found(new UserSummary(2L, "Luis User", "USER")));
         when(tasks.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Task created = service.create("Preparar clase", null, LUIS);
@@ -50,7 +50,7 @@ class TaskServiceTest {
 
     @Test
     void createFailsWhenTheOwnerDoesNotExist() {
-        when(userLookup.findById(2L)).thenReturn(Optional.empty());
+        when(userLookup.findById(2L)).thenReturn(new UserLookupResult.NotFound());
 
         assertThatThrownBy(() -> service.create("Preparar clase", null, LUIS))
                 .isInstanceOf(OwnerNotFoundException.class);
@@ -59,12 +59,22 @@ class TaskServiceTest {
     }
 
     @Test
-    void createFailsWithoutSavingWhenTheLookupCannotAnswer() {
-        when(userLookup.findById(2L)).thenThrow(new ExternalServiceException("auth-service is not reachable"));
+    void createAcceptsTheTaskUnverifiedWhenTheLookupIsUnavailable() {
+        when(userLookup.findById(2L)).thenReturn(new UserLookupResult.Unavailable("circuit open"));
+        when(tasks.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.create("Preparar clase", null, LUIS))
-                .isInstanceOf(ExternalServiceException.class);
-        verify(tasks, never()).save(any());
+        Task created = service.create("Preparar clase", null, LUIS);
+
+        assertThat(created.isOwnerVerified()).isFalse();
+        verify(notifications).notifyTaskCreated(created);
+    }
+
+    @Test
+    void createMarksTheOwnerVerifiedWhenTheLookupFindsThem() {
+        when(userLookup.findById(2L)).thenReturn(new UserLookupResult.Found(new UserSummary(2L, "Luis User", "USER")));
+        when(tasks.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThat(service.create("Preparar clase", null, LUIS).isOwnerVerified()).isTrue();
     }
 
     @Test
