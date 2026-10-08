@@ -1,0 +1,23 @@
+# Jenkins del laboratorio:   JENKINS_ADMIN_PASSWORD=... docker compose -f jenkins/docker-compose.yml up --build -d     ->  http://localhost:8090
+#
+# RIESGO DE SEGURIDAD: se monta el socket de Docker del anfitrión. Quien controla este Jenkins (cualquier Jenkinsfile que ejecute)
+# controla Docker en tu máquina, y por tanto es equivalente a ser root en ella. Es aceptable en un laboratorio local; no lo repliques
+# en un servidor compartido (alternativas: agentes con Docker en máquinas aisladas, Docker rootless, builds sin demonio como Kaniko).
+# Corre como root porque en Docker Desktop el socket es root:root con permisos 660.
+services:
+  jenkins:
+    build: .
+    container_name: taskhub-jenkins
+    user: root
+    ports:
+      - "8090:8080"                                    # 8080 ya es el gateway de TaskHub
+    environment:
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?JENKINS_ADMIN_PASSWORD is required}
+      TASKHUB_REPO_URL: ${TASKHUB_REPO_URL:-https://github.com/sergiolg98/taskhub-api.git}
+      TASKHUB_BRANCH: ${TASKHUB_BRANCH:-*/main}
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  jenkins-home:

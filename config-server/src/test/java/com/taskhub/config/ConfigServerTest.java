@@ -56,6 +56,40 @@ class ConfigServerTest {
                 .andExpect(jsonPath("$.propertySources[0].source['taskhub.task-service.url']").value("http://task-service:8082"));
     }
 
+    // Inside a container "localhost" is the container itself: the docker and prod profiles must use service names.
+    @Test
+    void dockerAndProdProfilesNeverUseLocalhost() throws IOException {
+        List<String> offenders;
+        try (Stream<Path> files = Files.list(Path.of("../config-repo"))) {
+            offenders = files.filter(f -> f.getFileName().toString().matches(".*-(docker|prod)\\.properties"))
+                    .flatMap(f -> {
+                        try {
+                            return Files.readAllLines(f).stream().filter(l -> !l.startsWith("#"))
+                                    // allowed-origins is where the BROWSER lives, not an address between containers
+                                    .filter(l -> !l.contains("allowed-origins"))
+                                    .filter(l -> l.contains("localhost") || l.contains("127.0.0.1"))
+                                    .map(l -> f.getFileName() + ": " + l);
+                        } catch (IOException e) {
+                            throw new IllegalStateException(e);
+                        }
+                    }).toList();
+        }
+        assertThat(offenders).isEmpty();
+    }
+
+    @Test
+    void dockerProfileOfEveryServiceIsServed() throws Exception {
+        mvc.perform(get("/task-service/docker"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.propertySources[0].source['taskhub.auth-service.url']").value("http://auth-service:8081"));
+        mvc.perform(get("/api-gateway/docker"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.propertySources[0].source['taskhub.task-service.url']").value("http://task-service:8082"));
+        mvc.perform(get("/auth-service/docker"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.propertySources[0].source['spring.datasource.url']").value("jdbc:mysql://mysql-auth:3306/auth_db"));
+    }
+
     @Test
     void theConfigRepoHoldsNoSecrets() throws IOException {
         List<String> offenders;
