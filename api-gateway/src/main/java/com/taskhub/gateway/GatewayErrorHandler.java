@@ -11,6 +11,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.ConnectException;
+import java.net.UnknownHostException;
 import java.util.concurrent.TimeoutException;
 
 // Turns any failure inside the gateway (route not found, service down, timeout) into the shared error format.
@@ -39,7 +40,8 @@ class GatewayErrorHandler implements ErrorWebExceptionHandler {
 
     private static HttpStatus statusOf(Throwable ex) {
         for (Throwable t = ex; t != null; t = t.getCause()) {
-            if (t instanceof ConnectException) {
+            // UnknownHostException: the service name no longer resolves (its container is stopped), same meaning as a refused connection
+            if (t instanceof ConnectException || t instanceof UnknownHostException) {
                 return HttpStatus.SERVICE_UNAVAILABLE;
             }
             if (t instanceof TimeoutException) {
